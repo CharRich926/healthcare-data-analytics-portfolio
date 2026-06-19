@@ -1,0 +1,17 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.swp
+
+# SSIS build artifacts
+*.suo
+*.user
+bin/
+obj/
+
+# Don't commit anything with real connection strings, passwords, or credentials
+*.dtsConfig
+*secrets*
