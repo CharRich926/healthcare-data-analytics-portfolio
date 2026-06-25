@@ -2,7 +2,7 @@
 
 **Charles Richardson** | Healthcare Claims & Payer Analytics | June 2026
 
-End-to-end healthcare data analytics environment — designed, built, and migrated from scratch. This repo contains the database architecture, SQL query library, ETL pipeline, and Power BI reporting layer behind a claims denial analysis platform modeled on real payer/provider analytics workflows.
+End-to-end healthcare data analytics environment — designed, built, and migrated from scratch. This repo contains the database architecture, SQL query library, ETL pipeline, Python data quality framework, Databricks notebooks, Power Automate flows, and Power BI reporting layer behind a claims denial analysis platform modeled on real payer/provider analytics workflows.
 
 ---
 
@@ -12,12 +12,15 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 |---|---|
 | [`sql/01_database_setup`](sql/01_database_setup) | Table DDL, indexes, schema design |
 | [`sql/02_views`](sql/02_views) | 3 views — active providers, in-network filter, provider claim summary |
-| [`sql/03_analytical_queries`](sql/03_analytical_queries) | Window functions, CTEs, peer benchmarking, utilization analysis |
+| [`sql/03_analytical_queries`](sql/03_analytical_queries) | Window functions, CTEs, peer benchmarking, utilization analysis, authorization approval rates |
 | [`sql/04_data_quality_audits`](sql/04_data_quality_audits) | NULL audits, orphan record checks, duplicate detection, date validity |
 | [`sql/05_stored_procedures`](sql/05_stored_procedures) | 4 stored procedures — member enrollment, claim filtering, provider termination, claim history |
 | [`power-bi`](power-bi) | Dashboard screenshots, DAX measures, report description |
 | [`ssis`](ssis) | ETL pipeline description and package notes |
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
+| [`Databricks`](Databricks) | PySpark notebooks — data ingestion, transformation, Delta table writes, Jobs & Pipelines |
+| [`Python`](Python) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
+| [`Power_Automate`](Power_Automate) | 3 cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh |
 
 ---
 
@@ -28,27 +31,31 @@ The environment was built in three stages, mirroring how a real healthcare data 
 ```
 ┌─────────────────────┐        ┌──────────────────────┐        ┌───────────────────────┐
 │   ON-PREMISES        │  ADF   │   AZURE SQL DATABASE  │ Connect │   MICROSOFT FABRIC     │
-│   SQL Server (local) │ ─────► │   (cloud, live)        │ ─────► │   Lakehouse + SQL       │
-│   - 9 tables          │ migr. │   sql-healthcarepractice│        │   endpoint + Power BI   │
-│   - 3 views            │       │   -cr.database.windows │        │   semantic model         │
-│   - stored procedures  │       │   .net                 │        │                          │
+│   SQL Server (local) │ ─────► │   (cloud, live)        │ ─────► │   Lakehouse + Warehouse │
+│   - 9 tables          │ migr. │   sql-healthcarepractice│        │   + SQL endpoint         │
+│   - 3 views            │       │   -cr.database.windows │        │   + Power BI              │
+│   - stored procedures  │       │   .net                 │        │   semantic model           │
 └─────────────────────┘        └──────────────────────┘        └───────────────────────┘
-        ▲
-        │ SSIS ETL
-        │ (Integration Services Catalogs
-        │  on local + Azure instances)
+        ▲                                                                    ▲
+        │ SSIS ETL                                              Power Automate (3 flows)
+        │ (Integration Services)                                Databricks → Delta Lake
 ```
 
 **1. Database design & build (on-premises)**
-Designed and built the `HealthcarePractice` database from scratch on a local SQL Server instance: 9 tables (`claims`, `claim_lines`, `providers`, `payer`, `diagnosis`, `members`, `dim_date`, `authorizations`, `network_contracts`, `audit_log`), 3 views, and stored procedures. Also evaluated SQL Server ledger tables for tamper-evident audit logging (later dropped after evaluation — not needed for this use case).
+Designed and built the `HealthcarePractice` database from scratch on a local SQL Server instance: 9 tables (`claims`, `claim_lines`, `providers`, `payer`, `diagnosis`, `members`, `dim_date`, `authorizations`, `network_contracts`, `audit_log`), 3 views, and stored procedures.
 
 **2. Cloud migration via Azure Data Factory**
-Used ADF to migrate the full on-prem database — tables, views, and stored procedures — to a live Azure SQL Database (`sql-healthcarepractice-cr.database.windows.net`).
+Used ADF to migrate the full on-prem database to a live Azure SQL Database (`sql-healthcarepractice-cr.database.windows.net`).
 
 **3. Analytics integration via Microsoft Fabric**
-Connected the same Azure SQL instance to Microsoft Fabric as the analytics layer, with a named query library feeding Power BI in Import mode.
+Connected Azure SQL to Microsoft Fabric as the analytics layer — Lakehouse (Delta tables, SQL endpoint, semantic model) and Warehouse (full read/write T-SQL, `claims_summary` table). Power BI connects to both via live semantic models.
 
-**Result:** one Azure SQL database, accessible from three environments — SSMS, ADF, and Fabric — without duplicating data.
+**4. Automation & orchestration (Week 2)**
+- **Databricks:** PySpark notebooks for data ingestion, transformation, and Delta table writes. Jobs scheduled daily at 6AM (America/Chicago) to run before Power BI refresh.
+- **Power Automate:** 3 cloud flows — event-driven file trigger, weekly claims summary email, and daily Power BI dataset refresh at 7AM.
+- **Python:** Reusable data quality functions that mirror SQL audit queries, parameterized to accept any table/column, output consolidated pass/fail DataFrame.
+
+**Result:** one Azure SQL database, accessible from SSMS, ADF, Fabric, Databricks, and Power BI — without duplicating data.
 
 See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/schema.md`](docs/schema.md) for the full table/column reference.
 
@@ -59,27 +66,43 @@ See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/sc
 | # | Project | Status |
 |---|---|---|
 | 1 | [Claims Denial Analysis Dashboard](power-bi/README.md) | ✅ Complete |
-| 2 | Member Enrollment Aging Report | 🔲 Planned |
-| 3 | Data Quality Scorecard | 🔲 Planned |
-| 4 | SSIS Enhancement — Audit Logging | 🔲 Planned |
-| 5 | Fabric Warehouse Build | 🔲 Planned |
+| 2 | Member Analysis Report | ✅ Complete |
+| 3 | Data Quality Scorecard | ✅ Complete |
+| 4 | SSIS Enhancement — Audit Logging | ✅ Complete |
+| 5 | Fabric Warehouse Build | ✅ Complete |
 
 ### Project 1 — Claims Denial Analysis Dashboard
 
 Built a full-stack denial analytics solution: SQL view → Fabric named query → published Power BI report with DAX measures.
 
-- **Top denial reason:** Duplicate Claim (24 denials, 23.5%) — an operational submission issue, not a clinical or coding error
+- **Top denial reason:** Duplicate Claim (24 denials, 23.5%)
 - **Second driver:** Coding Error (22 denials, 21.6%)
 - DAX measures: `Denial Rate %`, `Total Denied Amount`, `MoM Denial Change`, `Top Denial Reason`
 - Report published to the `HealthcarePractice` Fabric workspace, two pages (Denial Analysis, Denial Reasons), payer/provider slicers
 
 Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 
+### Project 2 — Member Analysis Report
+
+3-page Power BI report covering Claims Overview, Provider Performance, and Member Analysis. Built on a star schema with 11 DAX measures. Row-level security implemented for Provider and Executive roles. Published to Fabric with scheduled daily refresh at 6AM Central.
+
+### Project 3 — Data Quality Scorecard
+
+4 KPI cards in Power BI (Completeness, Integrity, Uniqueness, Validity) built from SQL audit queries and DAX measures. Published to Fabric workspace. Python equivalents built in Databricks — see [`Python/data_quality_functions.py`](Python/data_quality_functions.py).
+
+### Project 4 — SSIS Enhancement — Audit Logging
+
+Enhanced the `Load_NewClaims` SSIS package with a VB.NET Script Task (`SCR_WriteAuditLog`) that writes run metadata (timestamp, rows inserted, rows rejected) to the `audit_log` table after each execution. Package includes file validation, Lookup transforms for member/provider integrity, and reject routing.
+
+### Project 5 — Fabric Warehouse Build
+
+Created a Fabric Warehouse (`HealthcarePractice_Warehouse`) alongside the existing Lakehouse to demonstrate the architectural difference: the Lakehouse uses Delta files via a read-only SQL endpoint; the Warehouse provides full read/write T-SQL. Built `claims_summary` table via T-SQL, connected Power BI directly to the Warehouse semantic model, and verified end-to-end data flow.
+
 ---
 
 ## SQL Query Library
 
-10 production-style queries, organized by purpose. Each file is commented with the business question it answers and the SQL technique it demonstrates.
+13 production-style queries, organized by purpose. Each file is commented with the business question it answers and the SQL technique it demonstrates.
 
 | Query | Technique | Business Question |
 |---|---|---|
@@ -89,6 +112,9 @@ Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 | [`member_utilization`](sql/03_analytical_queries/member_utilization.sql) | `COUNT(DISTINCT)` | How many unique members are utilizing services by plan type? |
 | [`denial_reason_trend_by_month`](sql/03_analytical_queries/denial_reason_trend_by_month.sql) | CTE + `LAG()` | Are denial reasons trending up or down month-over-month? |
 | [`provider_network_status_impact`](sql/03_analytical_queries/provider_network_status_impact.sql) | Conditional aggregation | Do out-of-network claims deny at a different rate? |
+| [`auth_approval_rate_by_provider`](sql/03_analytical_queries/auth_approval_rate_by_provider.sql) | JOIN, CASE WHEN, NULLIF | What is the authorization approval rate by provider? |
+| [`network_contracts_expiring_90_days`](sql/03_analytical_queries/network_contracts_expiring_90_days.sql) | DATEADD, BETWEEN, NULL handling | Which provider contracts are expiring within 90 days? |
+| [`auth_approval_rate_cte`](sql/03_analytical_queries/auth_approval_rate_cte.sql) | CTE, DATEDIFF, avg_decision_days | Authorization approval rate by type with average decision time |
 | [`NULL_Audit_Across_Key_Tables`](sql/04_data_quality_audits/NULL_Audit_Across_Key_Tables.sql) | `UNION ALL`, CASE WHEN IS NULL | Where is data incomplete? |
 | [`Orphaned_Records_Check`](sql/04_data_quality_audits/Orphaned_Records_Check.sql) | `NOT EXISTS` | Are there claims referencing missing diagnosis codes? |
 | [`Duplicate_Claims_Check`](sql/04_data_quality_audits/Duplicate_Claims_Check.sql) | `GROUP BY` + `HAVING COUNT(*) > 1` | Are there true duplicate claim records? |
@@ -113,24 +139,69 @@ Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 
 ---
 
+## Databricks Notebooks
+
+| Notebook | Contents |
+|---|---|
+| [`HC_Practice_Week2_Monday`](Databricks/HC_Practice_Week2_Monday.ipynb) | PySpark data ingestion from Unity Catalog volume, DataFrame exploration (`show`, `printSchema`, `describe`), filtered counts, denial rate by provider using `groupBy().agg()`, member utilization using `countDistinct()` |
+| [`HC_Practice_Week2_Thursday`](Databricks/HC_Practice_Week2_Thursday.ipynb) | 5 parameterized Python data quality functions, JSON schema validator, consolidated pass/fail quality report as pandas DataFrame — all 5 checks scored 100% against 95% threshold |
+
+**Databricks environment:** Community Edition, Unity Catalog volume at `/Volumes/workspace/default/hc_practice_data/`. Delta table `workspace.default.claims` created via `saveAsTable()`. Job `HC_WeeklyClaims_DataLoad` scheduled daily at 6AM Central.
+
+---
+
+## Python Data Quality Framework
+
+[`Python/data_quality_functions.py`](Python/data_quality_functions.py)
+
+5 reusable parameterized functions that mirror the SQL audit queries, built to run in Databricks against a pandas DataFrame:
+
+| Function | SQL Equivalent | Check |
+|---|---|---|
+| `check_completeness(df, column)` | `SUM(CASE WHEN col IS NOT NULL ...)` | % non-null values |
+| `check_uniqueness(df, column)` | `COUNT(DISTINCT col) / COUNT(*)` | % distinct values |
+| `check_validity(df, column, valid_values)` | `SUM(CASE WHEN col IN (...) ...)` | % values in allowed set |
+| `check_integrity(df, fk_column, valid_ids)` | FK JOIN to reference table | % FK values matched |
+| `validate_json_schema(path, required_fields)` | No SQL equivalent | Missing field detection per record |
+
+Output: consolidated pandas DataFrame with Pass/Fail at configurable threshold (default 95%).
+
+---
+
+## Power Automate Flows
+
+| Flow | Trigger | Action |
+|---|---|---|
+| `HC_NewClaims_File_Trigger` | File lands in OneDrive folder | Sends Outlook.com email with dynamic filename |
+| `HC_Weekly_Claims_Summary` | Every Monday (scheduled) | Sends claims summary email with `formatDateTime()` dynamic date in subject |
+| `HC_Refresh_PowerBI_Dataset` | Daily at 7AM (scheduled) | Refreshes `HealthcarePractice_SemanticModel` in Power BI |
+
+Screenshots: [`Power_Automate/`](Power_Automate/)
+
+**Pipeline sequencing:** Databricks Job runs at 6AM → Power BI refresh runs at 7AM, ensuring the semantic model always reflects the latest data.
+
+---
+
 ## Key Technical Learnings
 
 A few of the architectural and SQL principles applied throughout this build — full list in [`docs/learnings.md`](docs/learnings.md):
 
 - **CTEs are a readability tool, not a performance optimizer** — SQL Server inlines them before generating execution plans
-- **Fabric's SQL analytics endpoint is read-only** — views are saved via "Save as view" in the UI, not `CREATE VIEW` DDL; named queries are the practical equivalent of views for Power BI consumption
-- **Direct Lake mode doesn't support SQL views**, only Delta tables in OneLake — Import mode in Power BI was the practical workaround under Fabric trial (F2) capacity limits
-- **`NOT EXISTS` outperforms `LEFT JOIN` / `IS NULL`** for orphan-record checks on large datasets
-- **Window functions don't collapse rows** — unlike `GROUP BY`, `RANK() OVER` keeps every row and adds a ranking column alongside it
+- **Fabric's SQL analytics endpoint is read-only** — views are saved via "Save as view" in the UI; named queries are the practical equivalent for Power BI consumption
+- **Direct Lake mode requires exact data type matches** on relationship columns — mismatches silently break relationships
+- **Fabric Warehouse does not support DEFAULT constraints** in `CREATE TABLE` — hardcoded values required
+- **`NOT EXISTS` outperforms `LEFT JOIN / IS NULL`** for orphan-record checks on large datasets
+- **Databricks Serverless compute** does not persist variables across cells — each cell must be self-contained with `spark.read.csv()` re-declared
+- **Power Automate on M365 trial tenants** does not fully provision OneDrive for Business or Office 365 Outlook connectors — standard OneDrive + Outlook.com connectors (Yahoo account) required
 
 ---
 
 ## Stack
 
-`SQL Server` `Azure Data Factory` `Azure SQL Database` `Microsoft Fabric` `Power BI` `DAX` `SSIS` `T-SQL`
+`SQL Server` `Azure Data Factory` `Azure SQL Database` `Microsoft Fabric` `Power BI` `DAX` `SSIS` `T-SQL` `Databricks` `PySpark` `Python` `pandas` `Delta Lake` `Power Automate`
 
 ---
 
 ## Contact
 
-Charles Richardson — open to healthcare data analytics roles.
+Charles Richardson — open to healthcare data analytics and data engineering roles in Houston, TX.
