@@ -2,7 +2,7 @@
 
 **Charles Richardson** | Healthcare Claims & Payer Analytics | June 2026
 
-End-to-end healthcare data analytics environment — designed, built, and migrated from scratch. This repo contains the database architecture, SQL query library, ETL pipeline, Python data quality framework, Databricks notebooks, Power Automate flows, and Power BI reporting layer behind a claims denial analysis platform modeled on real payer/provider analytics workflows.
+End-to-end healthcare data analytics environment — designed, built, and migrated from scratch. This repo contains the database architecture, SQL query library, ETL pipeline, Python data quality framework, Databricks notebooks, Power Automate flows, Power Apps canvas app, and Power BI reporting layer behind a claims denial analysis platform modeled on real payer/provider analytics workflows.
 
 ---
 
@@ -21,6 +21,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`Databricks`](Databricks) | PySpark notebooks — data ingestion, transformation, Delta table writes, Jobs & Pipelines |
 | [`Python`](Python) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
 | [`Power_Automate`](Power_Automate) | 3 cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh |
+| [`Power_Apps`](Power_Apps) | HC_ClaimLookup canvas app — real-time claim status lookup connected live to Azure SQL |
 
 ---
 
@@ -70,6 +71,7 @@ See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/sc
 | 3 | Data Quality Scorecard | ✅ Complete |
 | 4 | SSIS Enhancement — Audit Logging | ✅ Complete |
 | 5 | Fabric Warehouse Build | ✅ Complete |
+| 6 | Power Apps — HC_ClaimLookup Canvas App | ✅ Complete |
 
 ### Project 1 — Claims Denial Analysis Dashboard
 
@@ -182,6 +184,24 @@ Screenshots: [`Power_Automate/`](Power_Automate/)
 
 ---
 
+## Power Apps
+
+[`Power_Apps/`](Power_Apps/) — [`README`](Power_Apps/Power_Apps_README.md)
+
+**HC_ClaimLookup** is a Canvas App that provides real-time claim status lookup against the HealthcarePractice Azure SQL Database. A user enters a Claim ID, the app queries the `claims` table directly, and returns the claim status and billed amount instantly.
+
+| Control | Purpose |
+|---|---|
+| `txtClaimID` — Text Input | User enters the claim ID to search |
+| `btnSearch` — Button | Triggers `ClearCollect(ClaimResults, Filter(claims, claim_id = Value(txtClaimID.Text)))` |
+| `galClaimResults` — Vertical Gallery | Displays Claim ID, Status, and Billed Amount from query results |
+
+**Verified results:** Claim 2 → Approved \| $180.00 · Claim 5 → Denied \| $1,200.00
+
+Screenshots: [`Power_Apps/`](Power_Apps/)
+
+---
+
 ## Key Technical Learnings
 
 A few of the architectural and SQL principles applied throughout this build — full list in [`docs/learnings.md`](docs/learnings.md):
@@ -198,7 +218,7 @@ A few of the architectural and SQL principles applied throughout this build — 
 
 ## Stack
 
-`SQL Server` `Azure Data Factory` `Azure SQL Database` `Microsoft Fabric` `Power BI` `DAX` `SSIS` `T-SQL` `Databricks` `PySpark` `Python` `pandas` `Delta Lake` `Power Automate`
+`SQL Server` `Azure Data Factory` `Azure SQL Database` `Microsoft Fabric` `Power BI` `DAX` `SSIS` `T-SQL` `Databricks` `PySpark` `Python` `pandas` `Delta Lake` `Power Automate` `Power Apps`
 
 ---
 
