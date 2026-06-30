@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: healthcarepractice
+    schema: dbo
+    tables:
+      - name: claims
