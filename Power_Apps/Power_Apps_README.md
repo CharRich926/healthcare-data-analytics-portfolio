@@ -94,10 +94,6 @@ ThisItem.claim_status & " | $" & Text(ThisItem.billed_amount, "###,##0.00")
 
 | Screenshot | Description |
 |---|---|
-| `PowerApps_HC_ClaimLookup_Approved.png` | Search result for an Approved claim |
-| `PowerApps_HC_ClaimLookup_Denied.png` | Search result for a Denied claim |
-| `PowerApps_HC_ClaimLookup_Approved_BilledAmount.png` | Approved claim with billed amount displayed |
-| `PowerApps_HC_ClaimLookup_Denied_BilledAmount.png` | Denied claim with billed amount displayed |
 | `PowerApps_HC_ClaimLookup_ClaimID_Result.png` | Search by Claim ID mode returning a single result |
 | `PowerApps_HC_ClaimLookup_MemberID_MultiResult.png` | Search by Member ID mode returning multiple claims for one member |
 | `PowerApps_HC_ClaimLookup_BlankValidation.png` | Error message shown when search is submitted with a blank input |
