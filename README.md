@@ -17,6 +17,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`sql/03_analytical_queries`](sql/03_analytical_queries) | Window functions, CTEs, peer benchmarking, utilization analysis, authorization approval rates |
 | [`sql/04_data_quality_audits`](sql/04_data_quality_audits) | NULL audits, orphan record checks, duplicate detection, date validity |
 | [`sql/05_stored_procedures`](sql/05_stored_procedures) | Stored procedures — member enrollment, claim filtering, provider termination, claim history, denial summary, high-dollar claim review |
+| [`sql/06_indexing`](sql/06_indexing) | Non-clustered covering index on `authorizations`, plus verification script |
 | [`power-bi`](power-bi) | Dashboard screenshots, DAX measures, report description |
 | [`ssis`](ssis) | ETL pipeline description, package notes, troubleshooting log |
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
@@ -75,6 +76,7 @@ See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/sc
 | 4 | SSIS Enhancement — Audit Logging | ✅ Complete |
 | 5 | Fabric Warehouse Build | ✅ Complete |
 | 6 | Power Apps — HC_ClaimLookup Canvas App | ✅ Complete |
+| 7 | Authorizations — Indexing, Audit Log Root-Cause & Cross-Environment Data Quality | ✅ Complete |
 
 ### Project 1 — Claims Denial Analysis Dashboard
 
@@ -103,6 +105,17 @@ Enhanced the `Load_NewClaims` SSIS package with a VB.NET Script Task (`SCR_Write
 
 Created a Fabric Warehouse (`HealthcarePractice_Warehouse`) alongside the existing Lakehouse to demonstrate the architectural difference: the Lakehouse uses Delta files via a read-only SQL endpoint; the Warehouse provides full read/write T-SQL. Built `claims_summary` table via T-SQL, connected Power BI directly to the Warehouse semantic model, and verified end-to-end data flow.
 
+### Project 7 — Authorizations: Indexing, Audit Log Root-Cause & Cross-Environment Data Quality
+
+A single day's work spanning four layers of the stack, tied together by the `authorizations` table:
+
+- **SSMS:** Built a provider-grouped authorization turnaround-time baseline query, then added a non-clustered covering index (`IX_Authorizations_ProviderID` on `provider_id`, including `requested_date`/`decision_date`) so the query can be satisfied entirely from the index without a lookup to the base table. See [`sql/06_indexing`](sql/06_indexing).
+- **SSIS:** Reviewed `pipeline_audit_log` and found a logged run that didn't match a prior day's documented reconciliation. Root-caused to the audit-logging Script Task being a pure pass-through of SSIS variables rather than an independent recount — the real fix lived in the Data Flow's row-count wiring, not the logging code. Validated by generating an independently constructed 15-row test batch (rather than replaying the original file, which risked a primary-key collision) and confirming an exact predicted 4-inserted/11-rejected split, correctly logged. Full writeup: [`ssis/SSIS_Troubleshooting_Load_NewClaims.md`](ssis/SSIS_Troubleshooting_Load_NewClaims.md).
+- **Fabric:** Ran a NULL audit against `authorizations`, grouped by `decision` status to separate business-rule-expected NULLs from genuine anomalies. Found one row (`auth_id 7`) with `decision = 'Pending'` but a populated `decision_date` and NULL `units_approved` — a partial-decision state inconsistent with normal business rules. Confirmed the same finding identically across local SQL Server, Azure SQL, and the Fabric Lakehouse copy, ruling out stale sync as an explanation. See [`sql/04_data_quality_audits/NULL_Audit_Authorizations_By_Decision.sql`](sql/04_data_quality_audits/NULL_Audit_Authorizations_By_Decision.sql).
+- **Power BI:** Added `authorizations` to the `HealthcarePractice.pbix` semantic model, correcting an initial relationship misconfiguration (cardinality was set to One-to-one instead of Many-to-one; cross-filter direction was set to Both instead of Single) before applying. Built and validated an `Avg Turnaround Days` DAX measure that explicitly excludes the known-bad Pending row, returning 1.00 days — matching the SQL baseline.
+
+**Interview talking point:** A single data-quality finding, followed end-to-end — caught in a NULL audit, confirmed across three separate environments to rule out a sync issue, and reflected consistently in a downstream DAX measure that was deliberately written to exclude the bad record rather than let it silently skew a KPI.
+
 ---
 
 ## SQL Query Library
@@ -124,6 +137,14 @@ Production-style queries, organized by purpose. Each file is commented with the 
 | [`Orphaned_Records_Check`](sql/04_data_quality_audits/Orphaned_Records_Check.sql) | `NOT EXISTS` | Are there claims referencing missing diagnosis codes? |
 | [`Duplicate_Claims_Check`](sql/04_data_quality_audits/Duplicate_Claims_Check.sql) | `GROUP BY` + `HAVING COUNT(*) > 1` | Are there true duplicate claim records? |
 | [`date_range_audit`](sql/04_data_quality_audits/date_range_audit.sql) | `GETDATE()`, `DATEADD()` | Are any date fields out of valid range? |
+| [`NULL_Audit_Authorizations_By_Decision`](sql/04_data_quality_audits/NULL_Audit_Authorizations_By_Decision.sql) | `GROUP BY`, CASE WHEN IS NULL | Are NULLs in `authorizations` business-rule-expected, or genuine anomalies, by decision status? |
+
+### Indexing
+
+| Script | Technique | Purpose |
+|---|---|---|
+| [`Create_NonClustered_Index_Authorizations`](sql/06_indexing/Create_NonClustered_Index_Authorizations.sql) | Non-clustered covering index, `INCLUDE` columns | Speed up provider-grouped turnaround-time queries on `authorizations` without a base-table lookup |
+| [`IndexCheck`](sql/06_indexing/IndexCheck.sql) | `sys.indexes`, `DB_NAME()` | Verify the index exists and confirm the correct database/session context |
 
 ### Views
 
@@ -182,7 +203,7 @@ Output: consolidated pandas DataFrame with Pass/Fail at configurable threshold (
 | `HC_NewClaims_File_Trigger` | File lands in OneDrive folder | Sends Outlook.com email with dynamic filename |
 | `HC_Weekly_Claims_Summary` | Every Monday (scheduled) | Sends claims summary email with `formatDateTime()` dynamic date in subject |
 | `HC_Refresh_PowerBI_Dataset` | Daily at 7AM (scheduled) | Refreshes `HealthcarePractice_SemanticModel` in Power BI |
-| `HC_Claim_Denial_Alert` | Triggered against Azure SQL (OData filter) | Alerts on high-dollar denied claims — documented as a known trial-tenant Premium license limitation |
+| `HC_HighDollarClaims_Alert` | Manual trigger against Azure SQL (OData filter) | Alerts on high-dollar claims (billed_amount > $10,000) — documented as a known trial-tenant Premium license limitation |
 | `HC_DataQuality_Score_Email` | Daily at 8AM (scheduled) | Reads latest data quality scores, sends pass/fail summary email |
 | `HC_PowerBI_Refresh_Confirm` | Fires after Power BI dataset refresh completes | Sends confirmation email with timestamp |
 
@@ -223,6 +244,11 @@ A few of the architectural and SQL principles applied throughout this build — 
 - **Power Automate on M365 trial tenants** does not fully provision OneDrive for Business or Office 365 Outlook connectors — standard OneDrive + Outlook.com connectors (Yahoo account) required
 - **SSIS error/no-match outputs must each be explicitly wired** to a reject path — an unconnected output silently drops rows with no error or log entry (see [`ssis/README.md`](ssis/README.md))
 - **Denial rate should be calculated against adjudicated claims only** (denied + approved), not total claims — pending/unresolved claims in the denominator understate the true rate
+- **Always confirm `DB_NAME()` when a database object doesn't appear as expected** — multiple open SSMS tabs connected to different sessions/databases can create the illusion of a failed operation that actually succeeded
+- **An audit-logging script can be entirely correct and still report wrong numbers** if it simply passes through values from upstream variables — the real fix has to happen at the source of those values (e.g., a Row Count component's position relative to a merge point), not in the logging code itself
+- **A flat NULL count can miss logical inconsistencies that only surface when grouped by a related status column** — cross-referencing `decision` against `decision_date`/`units_approved` caught an issue a column-by-column NULL audit alone would have missed
+- **Confirming a data-quality finding across every environment it lives in** (local, cloud database, Fabric) before writing it up rules out stale sync as an alternative explanation and materially strengthens the finding
+- **Power BI relationship cardinality and cross-filter direction are not always correct on creation** and should be explicitly checked — a mismatched cardinality or an unnecessary bidirectional filter can silently produce wrong numbers on visuals with no error raised
 
 ---
 
