@@ -85,3 +85,41 @@ quietly dropping data. Row-count reconciliation between source and
 all downstream paths (not just the primary destination) should be a
 standard validation step after any SSIS package run, not just a
 one-time check.
+
+## Follow-Up Validation (Thursday, 2026-07-06)
+
+The fix above was validated a second time, one day later, using an
+independently generated test batch rather than a replay of the original
+15-row file. Reprocessing the same file was avoided because the one row
+that had already loaded successfully would collide on primary key
+(`claim_id`) against `dbo.claims`.
+
+**Test batch:** 15 new rows (`claim_id` 6000–6014) with a deliberate mix
+of valid and invalid `member_id`/`provider_id` combinations — including
+rows with only the member invalid, only the provider invalid, and both
+invalid — specifically to exercise both Lookup no-match outputs through
+the Union All merge, not just the one caught in the original bug.
+
+**Result:**
+
+| Stage | Rows |
+|---|---|
+| Source (new batch) | 15 |
+| Dest_Claims (successful insert) | 4 |
+| Rejected_Claims (Union All merged output) | 11 |
+| **Total accounted for (4 + 11)** | **15** |
+
+`dbo.pipeline_audit_log` correctly recorded the run (`log_id 4`, 4
+inserted / 11 rejected), confirming that the audit logging mechanism —
+itself a simple pass-through of the `User::RowsInserted` /
+`User::RowsRejected` SSIS variables — also reflects the fix accurately,
+not just the Data Flow routing in isolation.
+
+| log_id | Date | Inserted | Rejected | Total Accounted For | Notes |
+|---|---|---|---|---|---|
+| 2 | 2026-06-22 | 3 | 5 | 8 of 10 | Pre-fix — silent row loss, undiagnosed at the time |
+| 3 | 2026-07-05 | 1 | 12 | 13 of 15 | Captured mid-fix, before Union All fully wired in |
+| 4 | 2026-07-06 | 4 | 11 | 15 of 15 | Post-fix, validated on independently generated data |
+
+This closes the loop: the fix holds against data it had never seen
+before, not just a repeat of the file that originally exposed the bug.
