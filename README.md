@@ -235,3 +235,6 @@ A few of the architectural and SQL principles applied throughout this build — 
 ## Contact
 
 Charles Richardson — open to healthcare data analytics and data engineering roles in Houston, TX.
+
+- **LinkedIn:** [linkedin.com/in/cerichardsonba](https://www.linkedin.com/in/cerichardsonba)
+- **Email:** cerjr2@gmail.com
