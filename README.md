@@ -4,6 +4,8 @@
 
 End-to-end healthcare data analytics environment — designed, built, and migrated from scratch. This repo contains the database architecture, SQL query library, ETL pipeline, Python data quality framework, Databricks notebooks, Power Automate flows, Power Apps canvas app, and Power BI reporting layer behind a claims denial analysis platform modeled on real payer/provider analytics workflows.
 
+> **Note on Data:** All data used in this portfolio (claims, members, providers, diagnoses, authorizations, etc.) is synthetically generated for demonstration purposes only. No real patient, member, or provider information is used anywhere in this project. The goal of this portfolio is to demonstrate hands-on technical capability across the SQL Server, SSIS, Azure, Fabric, and Power BI stack — not to represent real healthcare analytics findings.
+
 ---
 
 ## What's in this repo
@@ -14,13 +16,13 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`sql/02_views`](sql/02_views) | 3 views — active providers, in-network filter, provider claim summary |
 | [`sql/03_analytical_queries`](sql/03_analytical_queries) | Window functions, CTEs, peer benchmarking, utilization analysis, authorization approval rates |
 | [`sql/04_data_quality_audits`](sql/04_data_quality_audits) | NULL audits, orphan record checks, duplicate detection, date validity |
-| [`sql/05_stored_procedures`](sql/05_stored_procedures) | 4 stored procedures — member enrollment, claim filtering, provider termination, claim history |
+| [`sql/05_stored_procedures`](sql/05_stored_procedures) | Stored procedures — member enrollment, claim filtering, provider termination, claim history, denial summary, high-dollar claim review |
 | [`power-bi`](power-bi) | Dashboard screenshots, DAX measures, report description |
-| [`ssis`](ssis) | ETL pipeline description and package notes |
+| [`ssis`](ssis) | ETL pipeline description, package notes, troubleshooting log |
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
 | [`Databricks`](Databricks) | PySpark notebooks — data ingestion, transformation, Delta table writes, Jobs & Pipelines |
 | [`Python`](Python) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
-| [`Power_Automate`](Power_Automate) | 3 cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh |
+| [`Power_Automate`](Power_Automate) | Cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh, data quality score email, refresh confirmation |
 | [`Power_Apps`](Power_Apps) | HC_ClaimLookup canvas app — real-time claim status lookup connected live to Azure SQL |
 
 ---
@@ -31,32 +33,33 @@ The environment was built in three stages, mirroring how a real healthcare data 
 
 ```
 ┌─────────────────────┐        ┌──────────────────────┐        ┌───────────────────────┐
-│   ON-PREMISES        │  ADF   │   AZURE SQL DATABASE  │ Connect │   MICROSOFT FABRIC     │
+│   ON-PREMISES        │        │   AZURE SQL DATABASE  │ Connect │   MICROSOFT FABRIC     │
 │   SQL Server (local) │ ─────► │   (cloud, live)        │ ─────► │   Lakehouse + Warehouse │
-│   - 9 tables          │ migr. │   sql-healthcarepractice│        │   + SQL endpoint         │
+│   - 9 tables          │       │   sql-healthcarepractice│        │   + SQL endpoint         │
 │   - 3 views            │       │   -cr.database.windows │        │   + Power BI              │
 │   - stored procedures  │       │   .net                 │        │   semantic model           │
 └─────────────────────┘        └──────────────────────┘        └───────────────────────┘
         ▲                                                                    ▲
-        │ SSIS ETL                                              Power Automate (3 flows)
+        │ SSIS ETL                                              Power Automate (flows)
         │ (Integration Services)                                Databricks → Delta Lake
+                                                                  Fabric Data Pipelines
 ```
 
 **1. Database design & build (on-premises)**
 Designed and built the `HealthcarePractice` database from scratch on a local SQL Server instance: 9 tables (`claims`, `claim_lines`, `providers`, `payer`, `diagnosis`, `members`, `dim_date`, `authorizations`, `network_contracts`, `audit_log`), 3 views, and stored procedures.
 
-**2. Cloud migration via Azure Data Factory**
-Used ADF to migrate the full on-prem database to a live Azure SQL Database (`sql-healthcarepractice-cr.database.windows.net`).
+**2. Cloud migration to Azure SQL**
+Migrated the on-prem database to a live Azure SQL Database (`sql-healthcarepractice-cr.database.windows.net`). Azure Data Factory was used for the initial migration but has since been retired from the ongoing portfolio due to persistent account access issues on the trial tenant; all further pipeline and orchestration work uses Fabric Data Pipelines instead.
 
 **3. Analytics integration via Microsoft Fabric**
-Connected Azure SQL to Microsoft Fabric as the analytics layer — Lakehouse (Delta tables, SQL endpoint, semantic model) and Warehouse (full read/write T-SQL, `claims_summary` table). Power BI connects to both via live semantic models.
+Connected Azure SQL to Microsoft Fabric as the analytics layer — Lakehouse (Delta tables, SQL endpoint, semantic model) and Warehouse (full read/write T-SQL, `claims_summary` table). Power BI connects to both via live semantic models. Fabric Data Pipelines now handle the pipeline/orchestration work previously scoped to ADF.
 
 **4. Automation & orchestration (Week 2)**
 - **Databricks:** PySpark notebooks for data ingestion, transformation, and Delta table writes. Jobs scheduled daily at 6AM (America/Chicago) to run before Power BI refresh.
-- **Power Automate:** 3 cloud flows — event-driven file trigger, weekly claims summary email, and daily Power BI dataset refresh at 7AM.
+- **Power Automate:** Cloud flows — event-driven file trigger, weekly claims summary email, and daily Power BI dataset refresh at 7AM.
 - **Python:** Reusable data quality functions that mirror SQL audit queries, parameterized to accept any table/column, output consolidated pass/fail DataFrame.
 
-**Result:** one Azure SQL database, accessible from SSMS, ADF, Fabric, Databricks, and Power BI — without duplicating data.
+**Result:** one Azure SQL database, accessible from SSMS, Fabric, Databricks, and Power BI — without duplicating data.
 
 See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/schema.md`](docs/schema.md) for the full table/column reference.
 
@@ -79,14 +82,14 @@ Built a full-stack denial analytics solution: SQL view → Fabric named query �
 
 - **Top denial reason:** Duplicate Claim (24 denials, 23.5%)
 - **Second driver:** Coding Error (22 denials, 21.6%)
-- DAX measures: `Denial Rate %`, `Total Denied Amount`, `MoM Denial Change`, `Top Denial Reason`
+- DAX measures: `Denial Rate %`, `Total Denied Amount`, `MoM Denial Change`, `Top Denial Reason`, `Rolling 3-Month Denial Rate`
 - Report published to the `HealthcarePractice` Fabric workspace, two pages (Denial Analysis, Denial Reasons), payer/provider slicers
 
 Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 
 ### Project 2 — Member Analysis Report
 
-3-page Power BI report covering Claims Overview, Provider Performance, and Member Analysis. Built on a star schema with 11 DAX measures. Row-level security implemented for Provider and Executive roles. Published to Fabric with scheduled daily refresh at 6AM Central.
+3-page Power BI report covering Claims Overview, Provider Performance, and Member Analysis. Built on a star schema with DAX measures. Row-level security implemented for Provider and Executive roles. Published to Fabric with scheduled daily refresh at 6AM Central.
 
 ### Project 3 — Data Quality Scorecard
 
@@ -94,7 +97,7 @@ Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 
 ### Project 4 — SSIS Enhancement — Audit Logging
 
-Enhanced the `Load_NewClaims` SSIS package with a VB.NET Script Task (`SCR_WriteAuditLog`) that writes run metadata (timestamp, rows inserted, rows rejected) to the `audit_log` table after each execution. Package includes file validation, Lookup transforms for member/provider integrity, and reject routing.
+Enhanced the `Load_NewClaims` SSIS package with a VB.NET Script Task (`SCR_WriteAuditLog`) that writes run metadata (timestamp, rows inserted, rows rejected) to a pipeline audit log table after each execution. Package includes file validation, Lookup transforms for member/provider integrity, and reject routing. See [`ssis/README.md`](ssis/README.md) for a documented troubleshooting case involving a silent row-loss bug and its fix.
 
 ### Project 5 — Fabric Warehouse Build
 
@@ -104,7 +107,7 @@ Created a Fabric Warehouse (`HealthcarePractice_Warehouse`) alongside the existi
 
 ## SQL Query Library
 
-13 production-style queries, organized by purpose. Each file is commented with the business question it answers and the SQL technique it demonstrates.
+Production-style queries, organized by purpose. Each file is commented with the business question it answers and the SQL technique it demonstrates.
 
 | Query | Technique | Business Question |
 |---|---|---|
@@ -138,6 +141,8 @@ Created a Fabric Warehouse (`HealthcarePractice_Warehouse`) alongside the existi
 | [`usp_FilterClaims`](sql/05_stored_procedures/usp_FilterClaims.sql) | Dynamic SQL, `sp_executesql`, `QUOTENAME`, column whitelist | SQL-injection-safe dynamic claim filtering by column and value |
 | [`usp_GetMemberClaims`](sql/05_stored_procedures/usp_GetMemberClaims.sql) | Optional parameters, `ISNULL` defaults, `BETWEEN` | Member claim history lookup with optional date range |
 | [`usp_EnrollMember`](sql/05_stored_procedures/usp_EnrollMember.sql) | `OUTPUT` parameter, `SCOPE_IDENTITY()`, `RETURN` codes | Enroll a new member and pass the generated ID back to the caller |
+| [`usp_GetDenialSummary`](sql/05_stored_procedures/usp_GetDenialSummary.sql) | Conditional aggregation, `NULLIF`, adjudicated-claims denominator | Per-payer denial rate, denied billed amount, and adjudication mix |
+| [`usp_GetHighDollarClaimsByProvider`](sql/05_stored_procedures/usp_GetHighDollarClaimsByProvider.sql) | Default parameter value, `LEFT JOIN`, `ORDER BY ... DESC` | High-dollar approved claims for a provider, with diagnosis context |
 
 ---
 
@@ -177,6 +182,9 @@ Output: consolidated pandas DataFrame with Pass/Fail at configurable threshold (
 | `HC_NewClaims_File_Trigger` | File lands in OneDrive folder | Sends Outlook.com email with dynamic filename |
 | `HC_Weekly_Claims_Summary` | Every Monday (scheduled) | Sends claims summary email with `formatDateTime()` dynamic date in subject |
 | `HC_Refresh_PowerBI_Dataset` | Daily at 7AM (scheduled) | Refreshes `HealthcarePractice_SemanticModel` in Power BI |
+| `HC_Claim_Denial_Alert` | Triggered against Azure SQL (OData filter) | Alerts on high-dollar denied claims — documented as a known trial-tenant Premium license limitation |
+| `HC_DataQuality_Score_Email` | Daily at 8AM (scheduled) | Reads latest data quality scores, sends pass/fail summary email |
+| `HC_PowerBI_Refresh_Confirm` | Fires after Power BI dataset refresh completes | Sends confirmation email with timestamp |
 
 Screenshots: [`Power_Automate/`](Power_Automate/)
 
@@ -188,11 +196,11 @@ Screenshots: [`Power_Automate/`](Power_Automate/)
 
 [`Power_Apps/`](Power_Apps/) — [`README`](Power_Apps/Power_Apps_README.md)
 
-**HC_ClaimLookup** is a Canvas App that provides real-time claim status lookup against the HealthcarePractice Azure SQL Database. A user enters a Claim ID, the app queries the `claims` table directly, and returns the claim status and billed amount instantly.
+**HC_ClaimLookup** is a Canvas App that provides real-time claim status lookup against the HealthcarePractice Azure SQL Database. A user enters a Claim ID or Member ID (toggle between search modes), the app queries the `claims` table directly, and returns the claim status and billed amount instantly, with input validation and empty-result handling.
 
 | Control | Purpose |
 |---|---|
-| `txtClaimID` — Text Input | User enters the claim ID to search |
+| `txtClaimID` — Text Input | User enters the claim ID or member ID to search |
 | `btnSearch` — Button | Triggers `ClearCollect(ClaimResults, Filter(claims, claim_id = Value(txtClaimID.Text)))` |
 | `galClaimResults` — Vertical Gallery | Displays Claim ID, Status, and Billed Amount from query results |
 
@@ -213,12 +221,14 @@ A few of the architectural and SQL principles applied throughout this build — 
 - **`NOT EXISTS` outperforms `LEFT JOIN / IS NULL`** for orphan-record checks on large datasets
 - **Databricks Serverless compute** does not persist variables across cells — each cell must be self-contained with `spark.read.csv()` re-declared
 - **Power Automate on M365 trial tenants** does not fully provision OneDrive for Business or Office 365 Outlook connectors — standard OneDrive + Outlook.com connectors (Yahoo account) required
+- **SSIS error/no-match outputs must each be explicitly wired** to a reject path — an unconnected output silently drops rows with no error or log entry (see [`ssis/README.md`](ssis/README.md))
+- **Denial rate should be calculated against adjudicated claims only** (denied + approved), not total claims — pending/unresolved claims in the denominator understate the true rate
 
 ---
 
 ## Stack
 
-`SQL Server` `Azure Data Factory` `Azure SQL Database` `Microsoft Fabric` `Power BI` `DAX` `SSIS` `T-SQL` `Databricks` `PySpark` `Python` `pandas` `Delta Lake` `Power Automate` `Power Apps`
+`SQL Server` `Azure SQL Database` `Microsoft Fabric` `Fabric Data Pipelines` `Power BI` `DAX` `SSIS` `T-SQL` `Databricks` `PySpark` `Python` `pandas` `Delta Lake` `Power Automate` `Power Apps`
 
 ---
 
