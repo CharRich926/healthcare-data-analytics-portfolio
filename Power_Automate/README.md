@@ -53,7 +53,7 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 
 ---
 
-### Flow 4 — HC_Claim_Denial_Alert
+### Flow 4 — HC_HighDollarClaims_Alert
 
 | Property | Value |
 |---|---|
@@ -91,7 +91,7 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 | HC_NewClaims_File_Trigger | Event-driven — file arrival | SSIS file watcher / SCR_CheckFileExists |
 | HC_Weekly_Claims_Summary | Scheduled — every Monday | SQL Agent scheduled job |
 | HC_Refresh_PowerBI_Dataset | Scheduled — daily 7AM | SQL Agent scheduled job + API call |
-| HC_Claim_Denial_Alert | Manual (threshold-based alerting pattern) | Stored procedure + conditional alerting logic |
+| HC_HighDollarClaims_Alert | Manual (threshold-based alerting pattern) | Stored procedure + conditional alerting logic |
 
 ---
 
