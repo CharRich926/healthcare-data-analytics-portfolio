@@ -29,10 +29,12 @@ Two published reports in the `HealthcarePractice` Fabric workspace, built on top
 
 | Measure | Logic |
 |---|---|
-| `Denial Rate %` | Denied claims ÷ total claims |
+| `Denial Rate %` | Denied claims ÷ adjudicated claims (Denied + Approved only) — see note below |
 | `Total Denied Amount` | SUM of billed amount where claim is denied |
 | `MoM Denial Change` | Month-over-month change in denial volume |
 | `Top Denial Reason` | `FIRSTNONBLANK` + `TOPN` — surfaces leading denial reason dynamically |
+
+**Denominator correction:** `Denial Rate %` was originally calculated as denied claims ÷ total claims, which understated the true rate whenever Pending (unadjudicated) claims were present in the denominator. Corrected to denied ÷ (denied + approved) only, consistent with the same fix applied to [`usp_GetDenialSummary`](../sql/05_stored_procedures/usp_GetDenialSummary.sql) in the SQL layer — same business rule applied at both the database and reporting layer.
 
 ### Key Findings
 
@@ -45,7 +47,7 @@ Two published reports in the `HealthcarePractice` Fabric workspace, built on top
 
 ### Screenshots
 
-![Denial Analysis](Claims_Denial_Analysis.PNG)
+![Denial Analysis](Denial_Rate_Analysis.png)
 ![Denial Reasons](Claims_Denial_Reasons.PNG)
 ![Published in Fabric](Claims_Denial_Published_In_Fabric.PNG)
 
@@ -62,7 +64,7 @@ Two published reports in the `HealthcarePractice` Fabric workspace, built on top
 ## Report 2 — HealthcarePractice (Multi-Page Claims & Provider Report)
 
 **Status:** ✅ Complete — Published to Fabric workspace
-**Pages:** 3 (Claims Overview, Provider Performance, Member Analysis)
+**Pages:** 5 (Claims Overview, Provider Performance, Member Analysis, Data Quality Scorecard, Denial Analysis)
 **Source:** Azure SQL Database — all core tables via Import mode
 
 ### NPI Registry API Integration
@@ -107,8 +109,8 @@ The function was invoked against the `providers` table, expanding the NPI API re
 ### Pages
 
 **1. Claims Overview**
-- KPI cards: 552 Total Claims, $4.08M Total Billed, $1.84M Total Paid, 0.18 Denial Rate %
-- Total Billed by Year, Month and Year (line chart — 2023 vs 2024 comparison)
+- KPI cards: 552 Total Claims, $4.08M Total Billed, $1.84M Total Paid
+- Total Billed by Year and Month (line chart, monthly grain — 2023 vs 2024 comparison)
 - Total Claims by claim_status (bar chart: Approved, Denied, Pending)
 - Total Billed by payer_name (horizontal bar chart)
 
@@ -124,6 +126,26 @@ The function was invoked against the `providers` table, expanding the NPI API re
 - Total Billed by plan_type (bar chart — HMO, PPO, HDHP, EPO)
 - Total Claims by state (bar chart)
 
+**4. Data Quality Scorecard**
+- KPI cards: Completeness Score, Integrity Score, Uniqueness Score, Validity Score
+
+**5. Denial Analysis**
+- Rolling 3-Month Denial Rate Trend (line chart, built with `DATESINPERIOD` against a proper `dim_date` date table)
+- Denial Rate % KPI card (point-in-time, adjudicated-claims basis)
+- Total Claims by claim_status (bar chart)
+- Denial rate by payer_name (table: Total Claims, Total Denied Claims, Denial Rate %)
+
+This page pairs a point-in-time denial rate with a smoothed rolling trend so both "where things stand now" and "which direction things are moving" are visible together — the rolling measure exists specifically to reduce month-to-month noise that a single snapshot rate doesn't show.
+
+### DAX Measures (Report 2)
+
+| Measure | Logic |
+|---|---|
+| `Denial Rate %` | Denied claims ÷ adjudicated claims (Denied + Approved only) |
+| `Rolling 3-Month Denial Rate` | `DATESINPERIOD` over the trailing 3 months, denied ÷ adjudicated claims within that window |
+
+Both measures share the same adjudicated-claims-only denominator convention used in the SQL stored procedures, so the definition of "denial rate" stays consistent across the SQL, Power BI, and reporting layers of the portfolio.
+
 ### Live Report
 
 🔗 **[View Interactive Report in Microsoft Fabric](https://app.fabric.microsoft.com/links/wAjvlTxf5t?ctid=8fedba72-8759-44af-bedb-7ef18463552a&pbi_source=linkShare)**
@@ -133,7 +155,8 @@ The function was invoked against the `providers` table, expanding the NPI API re
 ![Claims Overview](HealthcarePractice_Claims.PNG)
 ![Provider Performance](HealthcarePractice_Provider_Performance.PNG)
 ![Member Analysis](HealthcarePractice_Member_Analysis.PNG)
-![Published in Fabric](HealthcarePractice_Published_in_Fabric.PNG)
+
+*Denial Analysis page screenshot for this report pending.*
 
 ### How it was built
 
@@ -142,5 +165,12 @@ The function was invoked against the `providers` table, expanding the NPI API re
 3. Function invoked against `providers` table — NPI number passed per row, API response expanded and merged
 4. NPI-enriched provider columns (`NPI_Credential`, `NPI_Status`, `NPI_City`, `NPI_State`, `NPI_Specialty`) added to data model
 5. DAX measures built for claims KPIs, denial rate, billed/paid aggregations
-6. Three-page report built with cross-filtering slicers
-7. Report published to HealthcarePractice Fabric workspace
+6. `dim_date` confirmed and marked as a proper Date Table, actively related to `claims[service_date]` → `dim_date[full_date]`, enabling correct time-intelligence measures
+7. Five-page report built with cross-filtering slicers, including a dedicated Denial Analysis page pairing point-in-time and rolling denial rate measures
+8. Report published to HealthcarePractice Fabric workspace
+
+---
+
+## Note on Payer Names
+
+Payer names shown throughout both reports (e.g., "Meridian Health Plan," "Harborview Insurance," "Federal Senior Care Program") are entirely fictional labels used for realistic sample data. Earlier versions of this data used real healthcare company names as placeholder labels; these were replaced to avoid any impression that the fabricated denial rates, claim volumes, or dollar figures in this portfolio reflect the actual performance of any real company or government program.
