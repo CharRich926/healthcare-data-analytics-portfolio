@@ -123,3 +123,19 @@ The same Azure SQL database is accessible from:
 | Power Automate | Orchestration — file triggers, scheduled emails, dataset refresh |
 
 No data is duplicated across environments — each tool connects to the same underlying Azure SQL source.
+
+## HC_Load_Claims_FromAzureSQL (Fabric Data Pipeline)
+
+**Purpose:** Loads claims data from Azure SQL Database into the Fabric Warehouse layer, replacing the ADF-based approach originally planned (ADF permanently dropped due to persistent Microsoft account access blocks).
+
+**Source:** Azure SQL Database — sql-healthcarepractice-cr.database.windows.net / HealthcarePractice / dbo.claims
+
+**Destination:** HealthcarePractice_Warehouse (Fabric Warehouse) / dbo.claims
+
+**Load type:** Full copy (entire table reloaded each run, not incremental)
+
+**Trigger:** Manual only — no schedule currently configured
+
+**Last verified run:** 6/30/2026, 46 sec duration, 552 rows read / 552 rows written, succeeded
+
+**Notes:** Single Copy job activity (Copy job_e01) wrapped in the pipeline. No transformations applied in-flight — straight table-to-table copy; any shaping happens downstream in Warehouse views/stored procedures. Adding a schedule is a candidate follow-up if this pipeline needs to run on a recurring cadence going forward.
