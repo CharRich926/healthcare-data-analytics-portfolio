@@ -32,6 +32,8 @@ Principles learned, tested, and applied while building this environment — not 
 - **Fabric Warehouse does not support DEFAULT constraints** in `CREATE TABLE` — hardcoded values are required in INSERT statements instead.
 - **Lakehouse vs Warehouse:** the Lakehouse uses Delta files accessible via a read-only SQL endpoint; the Warehouse provides full read/write T-SQL — closer to a traditional SQL database. Both can feed Power BI via live semantic models.
 - **Fabric trial SKU (F2)** has limited Spark compute — PySpark notebooks may hit capacity limits; Import mode is the practical fallback.
+- **Fabric's native Git integration is Azure DevOps-first** — in Workspace Settings → Git integration, Azure DevOps is selectable but GitHub appears grayed out by default. GitHub support exists in Fabric but requires tenant-level enablement (Admin Portal → Tenant Settings) and/or a capacity tier beyond trial. Relevant for any team using GitHub as their primary repo and planning a Fabric migration — native version control doesn't "just work" out of the box the way it might be assumed to.
+- **Fabric governance has two distinct layers that don't substitute for each other:** (1) data access control — e.g., "Authenticate with OneLake user-delegated SAS tokens" (Workspace Settings → Delegated Settings → OneLake settings), off by default, which governs whether apps can authenticate directly against OneLake storage using short-lived delegated tokens rather than the normal Fabric permission model; and (2) AI feature governance — e.g., "Only show approved items in standalone Copilot" (Delegated Settings → Copilot and Azure OpenAI Service), off by default, which curates what appears in the standalone Copilot experience. Important nuance: Copilot item usage is always subject to user permissions regardless of this toggle — the approval setting is a curation/UX control, not itself a security boundary.
 
 ---
 
@@ -90,6 +92,8 @@ Principles learned, tested, and applied while building this environment — not 
 ---
 
 ## Findings from This Dataset
+
+- **`claims.denial_reason`'s 81.34% NULL rate is structurally expected**, not a data quality gap — Pending and most Approved claims correctly have no reason. However, one Approved claim (claim_id 14) has `denial_reason` populated with non-denial text ("Billed amount corrected"), revealing the column is overloaded to also capture general claim adjustments. See `docs/denial_reason_null_investigation.md` for full methodology. Implication: `denial_reason IS NOT NULL` is not a reliable proxy for "this claim was denied" in this schema.
 
 - **Top denial reason:** Duplicate Claim — 24 denials (23.5% of all denials). An operational submission issue, not a clinical or coding error.
 - **Second denial driver:** Coding Error — 22 denials (21.6%).
