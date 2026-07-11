@@ -77,6 +77,7 @@ See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/sc
 | 5 | Fabric Warehouse Build | ✅ Complete |
 | 6 | Power Apps — HC_ClaimLookup Canvas App | ✅ Complete |
 | 7 | Authorizations — Indexing, Audit Log Root-Cause & Cross-Environment Data Quality | ✅ Complete |
+| 8 | Power BI & Fabric Deepening — Time Intelligence, Governance, Data Quality | ✅ Complete |
 
 ### Project 1 — Claims Denial Analysis Dashboard
 
@@ -116,6 +117,21 @@ A single day's work spanning four layers of the stack, tied together by the `aut
 
 **Interview talking point:** A single data-quality finding, followed end-to-end — caught in a NULL audit, confirmed across three separate environments to rule out a sync issue, and reflected consistently in a downstream DAX measure that was deliberately written to exclude the bad record rather than let it silently skew a KPI.
 
+### Project 8 — Power BI & Fabric Deepening: Time Intelligence, Governance, Data Quality
+
+A full week focused on Power BI/DAX depth and Microsoft Fabric governance, with SQL treated as a daily non-negotiable regardless of theme — string cleanup, aggregation/data-quality, and existence/comparison patterns were rotated in alongside the primary Power BI/Fabric work rather than dropped for it.
+
+- **Time intelligence & validation:** Built `Billed Amount PY` (`SAMEPERIODLASTYEAR`) and `Total Billed YTD` (`TOTALYTD`) DAX measures against a physical `dim_date` table (marked as Date Table, active relationship on `claims[service_date]`). Cross-checked both against manual SQL queries with matching results — same validation rigor as the Rolling 3-Month Denial Rate measure. A dedicated "Time Intelligence Validation" report page embeds the SQL alongside the DAX output as self-contained proof.
+- **CALCULATE context transition:** Deliberately built a context-transition example (`payer_display` calculated column, a hardcoded-filter test measure) to demonstrate the difference between row context and filter context live in the model, rather than only explaining it verbally.
+- **AI visual — Decomposition Tree:** Added a Decomposition Tree to the Denial Analysis page (`Denial Drivers`), closing a flagged PL-300 gap. Live drill path: Total Claims (552) → claim_status (Denied: 102) → payer_name → provider_name, giving an interactive "why are claims denied and where" narrative rather than a static chart.
+- **Authorizations report page:** Closed a gap flagged in Week 3 — added the `authorizations` → `providers` relationship (many-to-one, previously only linked to `members`) and built/validated an `Avg Turnaround Days` DAX measure (`AVERAGEX` + `NOT ISBLANK` filter on `decision_date`) against a manual SQL cross-check. Both returned 1.00 days exactly.
+- **Fabric Warehouse vs. Lakehouse comparison:** Ran an identical aggregate query against both `HealthcarePractice_Warehouse` and the Lakehouse SQL analytics endpoint. Results matched exactly (20 rows, identical values); the Lakehouse endpoint completed faster on this single-run test, though not treated as a definitive performance conclusion. Documented the architectural difference: the Lakehouse SQL endpoint is technically a read-only mirrored-warehouse layer over Delta tables (`/mirroredwarehouses/` in its URL path), not a first-class warehouse compute engine. Full writeup: [`Fabric/warehouse_vs_lakehouse_comparison.md`](Fabric/warehouse_vs_lakehouse_comparison.md).
+- **Fabric governance exploration:** Investigated a previously flagged PL-300 gap — workspace/sharing governance settings not yet explored. Found Fabric's native Git integration is Azure DevOps-first (GitHub is grayed out by default, requiring tenant-level enablement). Found two distinct governance layers under Delegated Settings: OneLake user-delegated SAS token authentication (data-access control, off by default) and standalone Copilot item approval (AI-feature governance, off by default) — with the important nuance that Copilot usage is always subject to user permissions regardless of that toggle.
+- **`denial_reason` NULL investigation:** Followed up on an 81.34% NULL rate flagged during a prior week's broader NULL audit. Confirmed structurally expected (Pending and most Approved claims correctly have no reason) via a `claim_status`-grouped breakdown, and confirmed zero Denied claims are missing a reason. Found one genuine anomaly: an Approved claim (`claim_id 14`) with `denial_reason` populated as "Billed amount corrected" — revealing the column is overloaded to also capture general claim adjustments, not exclusively denial explanations. Full writeup: [`docs/denial_reason_null_investigation.md`](docs/denial_reason_null_investigation.md).
+- **Data cleanliness checks:** [`provider_name_whitespace_check`](sql/04_data_quality_audits/provider_name_whitespace_check.sql) (`TRIM`/`UPPER` whitespace check on `provider_name`) and [`network_contracts_overlap_check`](sql/04_data_quality_audits/network_contracts_overlap_check.sql) (overlapping-date-range self-join against `network_contracts`) both returned zero rows — verified-clean findings, documented as such rather than treated as failed exercises.
+
+**Interview talking point:** The `denial_reason` investigation is a good example of a data-quality check that starts as "is this NULL rate a problem?" and ends up finding a subtler issue — a column serving two purposes — that a simple NULL-percentage audit alone wouldn't surface. It also demonstrates why `column IS NOT NULL` is a fragile proxy for a business condition unless explicitly verified.
+
 ---
 
 ## SQL Query Library
@@ -138,6 +154,9 @@ Production-style queries, organized by purpose. Each file is commented with the 
 | [`Duplicate_Claims_Check`](sql/04_data_quality_audits/Duplicate_Claims_Check.sql) | `GROUP BY` + `HAVING COUNT(*) > 1` | Are there true duplicate claim records? |
 | [`date_range_audit`](sql/04_data_quality_audits/date_range_audit.sql) | `GETDATE()`, `DATEADD()` | Are any date fields out of valid range? |
 | [`NULL_Audit_Authorizations_By_Decision`](sql/04_data_quality_audits/NULL_Audit_Authorizations_By_Decision.sql) | `GROUP BY`, CASE WHEN IS NULL | Are NULLs in `authorizations` business-rule-expected, or genuine anomalies, by decision status? |
+| [`denial_reason_null_investigation`](docs/denial_reason_null_investigation.md) | `GROUP BY`, conditional `SUM(CASE WHEN...)`, flip-side anomaly check | Is the 81.34% NULL rate on `denial_reason` a genuine gap or expected behavior — and is there any row where it's populated incorrectly? |
+| [`network_contracts_overlap_check`](sql/04_data_quality_audits/network_contracts_overlap_check.sql) | Self-join, `ISNULL` for open-ended ranges | Does any provider have two `network_contracts` with overlapping date ranges? (Result: none found) |
+| [`provider_name_whitespace_check`](sql/04_data_quality_audits/provider_name_whitespace_check.sql) | `TRIM`, `UPPER`, `LEN` comparison | Does `provider_name` contain leading/trailing whitespace? (Result: none found) |
 
 ### Indexing
 
@@ -249,6 +268,9 @@ A few of the architectural and SQL principles applied throughout this build — 
 - **A flat NULL count can miss logical inconsistencies that only surface when grouped by a related status column** — cross-referencing `decision` against `decision_date`/`units_approved` caught an issue a column-by-column NULL audit alone would have missed
 - **Confirming a data-quality finding across every environment it lives in** (local, cloud database, Fabric) before writing it up rules out stale sync as an alternative explanation and materially strengthens the finding
 - **Power BI relationship cardinality and cross-filter direction are not always correct on creation** and should be explicitly checked — a mismatched cardinality or an unnecessary bidirectional filter can silently produce wrong numbers on visuals with no error raised
+- **A column can be "mostly correct" and still be a fragile analytical proxy** — `denial_reason IS NOT NULL` looked like a safe stand-in for "this claim was denied" until one Approved row with an unrelated note surfaced; treating the column as overloaded (denial explanation + general adjustment note) rather than single-purpose is the more accurate model
+- **Fabric's native Git integration defaults to Azure DevOps** — GitHub requires tenant-level enablement and isn't available out of the box on a trial capacity, which matters for any GitHub-based team planning a Fabric migration
+- **Fabric governance is not one setting** — data-access control (OneLake delegated SAS tokens) and AI-feature governance (Copilot item approval) are separate layers that don't substitute for each other; Copilot's own item-approval toggle explicitly does not override underlying user permissions
 
 ---
 
