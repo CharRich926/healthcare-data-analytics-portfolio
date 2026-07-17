@@ -15,3 +15,11 @@ obj/
 # Don't commit anything with real connection strings, passwords, or credentials
 *.dtsConfig
 *secrets*
+dbt-env/
+
+# dbt logs
+healthcarepractice_dbt/logs/
+healthcarepractice_dbt/logs/
+
+# Root-level runtime logs
+logs/

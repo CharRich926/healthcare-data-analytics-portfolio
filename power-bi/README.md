@@ -1,6 +1,8 @@
 # Power BI Reports — HealthcarePractice
 
-Two published reports in the `HealthcarePractice` Fabric workspace, built on top of the Azure SQL Database source via Import mode.
+Two published reports in the `HealthcarePractice` Fabric workspace.
+
+**Data source note (Week 5 Monday):** Report 2 was originally built via Import mode directly against the Azure SQL Database. As of Week 5 Monday, its data source was repointed to the `HealthcarePractice_Lakehouse` SQL analytics endpoint — the architecturally correct setup, since the Lakehouse is the intended Fabric-native analytics layer fed by ETL from Azure SQL, not a duplicate of the source system itself. Report 1 remains on the Fabric SQL endpoint as originally built (see Report 1 below).
 
 ---
 
@@ -64,8 +66,8 @@ Two published reports in the `HealthcarePractice` Fabric workspace, built on top
 ## Report 2 — HealthcarePractice (Multi-Page Claims & Provider Report)
 
 **Status:** ✅ Complete — Published to Fabric workspace
-**Pages:** 5 (Claims Overview, Provider Performance, Member Analysis, Data Quality Scorecard, Denial Analysis)
-**Source:** Azure SQL Database — all core tables via Import mode
+**Pages:** 6 (Claims Overview, Provider Performance, Member Analysis, Data Quality Scorecard, Denial Analysis, Denial Drivers)
+**Source:** `HealthcarePractice_Lakehouse` (see data source note above) — all core tables via Import mode
 
 ### NPI Registry API Integration
 
@@ -109,7 +111,7 @@ The function was invoked against the `providers` table, expanding the NPI API re
 ### Pages
 
 **1. Claims Overview**
-- KPI cards: 552 Total Claims, $4.08M Total Billed, $1.84M Total Paid
+- KPI cards: 555 Total Claims (as of Week 5 Monday's pipeline run), $4.08M Total Billed, $1.84M Total Paid
 - Total Billed by Year and Month (line chart, monthly grain — 2023 vs 2024 comparison)
 - Total Claims by claim_status (bar chart: Approved, Denied, Pending)
 - Total Billed by payer_name (horizontal bar chart)
@@ -137,12 +139,19 @@ The function was invoked against the `providers` table, expanding the NPI API re
 
 This page pairs a point-in-time denial rate with a smoothed rolling trend so both "where things stand now" and "which direction things are moving" are visible together — the rolling measure exists specifically to reduce month-to-month noise that a single snapshot rate doesn't show.
 
+**6. Denial Drivers**
+- Decomposition Tree (AI visual): Total Claims → claim_status → payer_name → provider_name, drilling from the top-level claim count down to individual provider-level denial detail
+- Serves as the live validation surface for the Fabric incremental pipeline (`HC_Load_Claims_Incremental`) — a successful pipeline run should produce a visible, traceable shift in Total Claims and the Denied count on this page after refresh
+- Also hosts a "DAX Validation" style check page (`filter_context_demo`) used to demonstrate `RANKX` + filter context interaction: a Provider Rank by Billed Amount table alongside a `claim_status` slicer, showing the same measure producing different rankings depending on which status is selected — see `power-bi/filter_context_demo.PNG`
+
 ### DAX Measures (Report 2)
 
 | Measure | Logic |
 |---|---|
 | `Denial Rate %` | Denied claims ÷ adjudicated claims (Denied + Approved only) |
 | `Rolling 3-Month Denial Rate` | `DATESINPERIOD` over the trailing 3 months, denied ÷ adjudicated claims within that window |
+| `Denial Category` | `SWITCH(TRUE(), ...)` bucketing raw `denial_reason` text into higher-level categories (Clinical, Authorization, Administrative, Financial, Other) for cleaner grouping on the Denial Drivers decomposition tree |
+| `Provider Rank by Billed Amount` | `RANKX` over all providers by total billed amount, using `ALL(providers[provider_name])` to remove provider-level filtering while still respecting other active filters (e.g. claim_status) — the live filter-context demo above uses this measure |
 
 Both measures share the same adjudicated-claims-only denominator convention used in the SQL stored procedures, so the definition of "denial rate" stays consistent across the SQL, Power BI, and reporting layers of the portfolio.
 
@@ -168,6 +177,9 @@ Both measures share the same adjudicated-claims-only denominator convention used
 6. `dim_date` confirmed and marked as a proper Date Table, actively related to `claims[service_date]` → `dim_date[full_date]`, enabling correct time-intelligence measures
 7. Five-page report built with cross-filtering slicers, including a dedicated Denial Analysis page pairing point-in-time and rolling denial rate measures
 8. Report published to HealthcarePractice Fabric workspace
+9. **(Week 5 Monday)** Fabric Data Pipeline `HC_Load_Claims_Incremental` built to append new/changed claims from Azure SQL into the Lakehouse `claims` table; verified end-to-end by confirming a pipeline run produces a visible, traceable shift in this report's Total Claims and Denied counts on refresh
+10. **(Week 5 Monday)** Report's data source repointed from Azure SQL Database directly to the `HealthcarePractice_Lakehouse` SQL analytics endpoint, so the report reflects pipeline-loaded data rather than bypassing the Lakehouse entirely
+11. **(Week 5 Monday)** `Denial Category` (SWITCH) and `Provider Rank by Billed Amount` (RANKX) measures added; RANKX paired with a live filter-context demonstration (`filter_context_demo.PNG`) to validate the measure's behavior under different slicer states before considering it done
 
 ---
 
