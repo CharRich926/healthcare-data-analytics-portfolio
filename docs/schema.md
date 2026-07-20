@@ -53,7 +53,7 @@ Provider-payer network contract terms.
 
 Key columns: `contract_id`, `provider_id`, `payer_id`, `start_date`, `end_date`, `contract_type`.
 
-> **Data gap noted:** All `end_date` values in this table are NULL — network contracts expiring within 90 days query returns 0 rows as expected. Not a query bug.
+> **Correction (Week 5 Tuesday):** an earlier version of this doc claimed all `end_date` values in this table are NULL. That is no longer accurate — `providers_no_active_contract.sql` (Week 5 Tuesday) confirmed at least one non-NULL, past-dated `end_date` (provider_id 7 / Dr. Linda Chow, contract expired 2025-12-31), which was the mechanism that let the query correctly distinguish "never contracted" (NULL forever) from "contract lapsed" (a real past end_date). `end_date` is a mix of NULL (open-ended/active) and populated (expired) values, not uniformly NULL.
 
 ### dbo.audit_log
 Operational audit logging table. Populated by the SSIS `SCR_WriteAuditLog` Script Task after each pipeline run.
@@ -70,6 +70,11 @@ Aggregated claims summary table built directly in the Fabric Warehouse via T-SQL
 Key columns: `claim_status`, `total_claims`, `total_billed`, `total_allowed`, `total_paid`, `avg_billed`, `summary_date`.
 
 Data as of June 24, 2026: Approved — 6 claims / $29,730 total billed; Denied — 4 claims / $11,260 total billed.
+
+### dbo.pipeline_watermark (HealthcarePractice_Warehouse)
+Control table backing the `HC_Load_Claims_Incremental` pipeline's watermark logic (Week 5 Wednesday), replacing an earlier fixed-cutoff-date stopgap.
+
+Key columns: `last_loaded_date`. Read by `LU_Get_Watermark` at the start of each pipeline run and updated by `SCR_Update_Watermark` at the end, so re-running the pipeline only pulls claims newer than the last successful load. See [`Fabric/README.md`](../Fabric/README.md) for the full 4-activity pipeline chain and the failure mode hit while building it.
 
 ---
 

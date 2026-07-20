@@ -179,6 +179,8 @@ Published the first curated **App** from the `HealthcarePractice` workspace, sel
 
 Audience scoped to specific users rather than the entire organization, appropriate for a portfolio/trial-tenant environment.
 
+![Published App — Claims Overview](HealthcarePractice_App_ClaimsOverview.PNG)
+
 ### Live Report
 
 🔗 **[View Interactive Report in Microsoft Fabric](https://app.fabric.microsoft.com/links/wAjvlTxf5t?ctid=8fedba72-8759-44af-bedb-7ef18463552a&pbi_source=linkShare)**

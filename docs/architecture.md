@@ -18,10 +18,12 @@ This environment was built to mirror a real healthcare data platform's lifecycle
 └──────────────────────┘        └───────────────────────┘        └────────────────────────────┘
           ▲                                                                        ▲
           │                                                                        │
-          │  SSIS ETL Pipeline                                     Power Automate (3 flows)
+          │  SSIS ETL Pipeline                                     Power Automate (5 flows)
           │  Integration Services Catalogs                         • File trigger → email notification
           │  deployed on local + Azure SQL                         • Weekly summary email
           │                                                         • Daily Power BI dataset refresh
+          │                                                         • High-dollar claims alert (Premium-gated)
+          │                                                         • Nightly semantic model refresh
    ┌──────────────┐
    │  Inbound       │                        ┌─────────────────────────────────────┐
    │  claims files   │                        │  DATABRICKS (Community Edition)      │
@@ -72,6 +74,12 @@ The same Azure SQL cloud instance was connected to Microsoft Fabric as the analy
 
 **Key constraint discovered:** Direct Lake mode does not support SQL views — only Delta tables stored in OneLake. Import mode in Power BI Desktop was used as the practical workaround under Fabric trial (F2) capacity limits.
 
+**Week 5 additions to this layer:**
+- `HC_Load_Claims_Incremental` — an incremental Copy Data pipeline from Azure SQL into the Lakehouse, backed by a genuine watermark control table (`dbo.pipeline_watermark` in the Warehouse) rather than a full reload; replaces an earlier fixed-cutoff-date stopgap.
+- `HC_Load_Warehouse_Reference_Tables` — closes a gap where `providers` and `network_contracts` existed in the Lakehouse but not the Warehouse.
+- A curated **Power BI App**, published from the `HealthcarePractice` workspace, presenting a viewer-facing subset of report pages distinct from the full workspace report.
+- Workspace reorganized into folders (`Lake_and_Ware_House`, `Notebooks`, `Pipeline_CopyJobs`, `Reports_SemanticModels`) as item count grew past what a flat list could stay legible at.
+
 ---
 
 ## Stage 4 — ETL Layer (SSIS)
@@ -94,10 +102,12 @@ An SSIS ETL pipeline (`Load_NewClaims.dtsx`) was built in Visual Studio for inbo
 - Delta table `workspace.default.claims` created via `saveAsTable()`
 - Job `HC_WeeklyClaims_DataLoad` scheduled daily at 6AM (America/Chicago)
 
-**Power Automate (3 cloud flows)**
+**Power Automate (5 cloud flows)**
 - `HC_NewClaims_File_Trigger` — event-driven; fires when a file lands in OneDrive folder, sends Outlook.com email with dynamic filename
 - `HC_Weekly_Claims_Summary` — scheduled every Monday; sends claims summary email with `formatDateTime()` dynamic date in subject
 - `HC_Refresh_PowerBI_Dataset` — scheduled daily at 7AM; refreshes `HealthcarePractice_SemanticModel` in Power BI
+- `HC_HighDollarClaims_Alert` — manually-triggered threshold alert against Azure SQL via server-side OData filtering; documented as built but not executable in this environment (Premium connector tier required)
+- `HC_Nightly_Pipeline_Refresh` (Week 5 Tuesday) — scheduled daily at 2AM; refreshes the Power BI dataset ahead of the day's Fabric work. Built after confirming Power Automate has no native connector for triggering a Fabric Data Pipeline directly — a genuine platform-boundary finding, documented in the flow itself rather than worked around silently.
 
 **Pipeline sequencing:** Databricks Job at 6AM → Power BI refresh at 7AM — ensures the semantic model always reflects the latest data.
 
