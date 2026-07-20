@@ -2,7 +2,7 @@
 
 ## Overview
 
-Four cloud flows built in Microsoft Power Automate to automate operational notifications, dataset refresh, and threshold-based alerting for the HealthcarePractice analytics environment. The flows cover four trigger/action patterns: event-driven (file arrival), scheduled (time-based), API-triggered (Power BI refresh), and manually-triggered threshold alerting against a live Azure SQL source. All flows authenticate via standard OneDrive and Outlook.com connectors using a personal Microsoft account.
+Five cloud flows built in Microsoft Power Automate to automate operational notifications, dataset refresh, and threshold-based alerting for the HealthcarePractice analytics environment. The flows cover five trigger/action patterns: event-driven (file arrival), scheduled (time-based), API-triggered (Power BI refresh), manually-triggered threshold alerting against a live Azure SQL source, and a scheduled Fabric-adjacent refresh flow. All flows authenticate via standard OneDrive and Outlook.com connectors using a personal Microsoft account.
 
 ---
 
@@ -71,9 +71,35 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 
 ---
 
+### Flow 5 — HC_Nightly_Pipeline_Refresh (Week 5 Tuesday)
+
+| Property | Value |
+|---|---|
+| Trigger | Recurrence — every 1 day, starting 7/16/26 at 2:00 AM |
+| Action 1 | Power BI — Refresh a dataset (Workspace: HealthcarePractice, Dataset: HealthcarePractice) |
+| Action 2 | Outlook.com — Send an email (V2), two recipients, confirmation + limitation note in body |
+
+**What it does:** A nightly recurrence flow intended to sit ahead of the day's Fabric pipeline/dashboard work, refreshing the `HealthcarePractice` semantic model and emailing a confirmation.
+
+**Key finding — Power Automate has no native connector for triggering a Fabric Data Pipeline.** Searched "Fabric" in the connector list (zero results) and exhausted the full Power BI connector list — only dataset/report/scorecard-level actions exist (Refresh a dataset, Add rows to a dataset, Export To File, etc.), nothing that invokes a Fabric Data Pipeline directly. Also checked whether the newly released Fabric Apps (Preview) workload filled this gap — confirmed it does not; Fabric Apps is a separate TypeScript/GraphQL app-building platform (Rayfin SDK) for custom backend/frontend apps on Fabric data, unrelated to pipeline orchestration.
+
+**Scope decision:** the flow refreshes the Power BI dataset directly rather than invoking the pipeline itself, since there's no connector path to do the latter. This limitation is documented in the flow's own email body, not just in session notes — the constraint travels with the artifact itself, not just with whoever built it.
+
+**Troubleshooting notes:**
+- SSMS connection to the Warehouse SQL endpoint required **Azure AD - Universal with MFA** authentication, not SQL Server Authentication (Fabric SQL endpoints have no SQL logins).
+- Warehouse and Lakehouse are two databases on the same Fabric SQL server — one registered server connection, not two.
+- Outlook.com OAuth connection failed on first attempt ("Unauthorized") — resolved on retry; a transient token issue, not a real permissions problem.
+- The **To** field for Send an email (V2) auto-tokenizes multiple addresses and visually displays them space-separated, but stores them semicolon-delimited under the hood — confirmed via Code view raw inputs.
+- Test run succeeded end-to-end (all 3 steps green, HTTP 200 on send). Delivered cleanly to Gmail; flagged as spam by Yahoo on first send — expected behavior for a brand-new automated sender, not a flow defect.
+
+**Interview talking point:** A genuine platform-boundary discovery, documented rather than silently worked around — knowing what a tool *can't* do, and building the workaround transparently into the artifact itself, is a stronger signal than a flow that happens to work with the limitation hidden.
+
+---
+
 ## Pipeline Sequencing
 
 ```
+2:00 AM — Power Automate Flow 5 (HC_Nightly_Pipeline_Refresh) refreshes the semantic model
 6:00 AM — Databricks Job (HC_WeeklyClaims_DataLoad) runs
            ↓ loads latest claims data to Delta table
 7:00 AM — Power Automate Flow 3 (HC_Refresh_PowerBI_Dataset) fires
@@ -92,6 +118,7 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 | HC_Weekly_Claims_Summary | Scheduled — every Monday | SQL Agent scheduled job |
 | HC_Refresh_PowerBI_Dataset | Scheduled — daily 7AM | SQL Agent scheduled job + API call |
 | HC_HighDollarClaims_Alert | Manual (threshold-based alerting pattern) | Stored procedure + conditional alerting logic |
+| HC_Nightly_Pipeline_Refresh | Scheduled — daily 2AM | SQL Agent job (dataset-level refresh only — no orchestration-layer equivalent exists in Power Automate for Fabric pipelines) |
 
 ---
 
@@ -100,7 +127,8 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 - **Connector limitation:** OneDrive for Business and Office 365 Outlook connectors are not fully provisioned on M365 trial tenants. All flows use the standard **OneDrive** connector and **Outlook.com** connector authenticated via a personal Yahoo-linked Microsoft account.
 - **Root cause of OAuth failures during build:** Third-party cookies were blocked in Chrome, preventing the OAuth popup from completing. Enabling third-party cookies resolved all connection issues.
 - **Premium connector limitation (Flow 4):** The "Get rows (V2)" SQL Server action requires a Power Automate Premium license, not included on the trial tenant. Flow 4 is fully built and configured but cannot be test-executed in this environment — documented as a known limitation rather than worked around.
-- **Lesson learned:** Always verify connector provisioning and licensing tier on trial tenants before building flows — premium/enterprise connectors and actions behave differently from personal/standard connectors, and some premium actions can be configured and saved successfully even when they can't actually run.
+- **Orchestration limitation (Flow 5):** Power Automate has no native connector for triggering a Fabric Data Pipeline as of this build — only dataset/report/scorecard-level Power BI actions are available. Flow 5 refreshes the semantic model directly instead, with the limitation documented in the flow itself.
+- **Lesson learned:** Always verify connector provisioning and licensing tier on trial tenants before building flows — premium/enterprise connectors and actions behave differently from personal/standard connectors, and some premium actions can be configured and saved successfully even when they can't actually run. Similarly, not every orchestration need has a corresponding connector — worth confirming platform capability before assuming a missing feature is a configuration gap.
 
 ---
 
@@ -114,6 +142,7 @@ Four cloud flows built in Microsoft Power Automate to automate operational notif
 | `PowerAutomate_Power_BI_Refresh.png` | Flow 3 — Daily 7AM recurrence + Power BI refresh action |
 | `PowerAutomate_HighDollar_GetClaims.png` | Flow 4 — Get rows (V2) action with OData filter (billed_amount gt 10000) |
 | `PowerAutomate_HighDollar_SendEmail.png` | Flow 4 — Email action with dynamic content from filtered claims |
+| `PowerAutomate_HC_Nightly_Pipeline_Refresh.png` | Flow 5 — Recurrence trigger, dataset refresh, and confirmation email (Week 5 Tuesday) |
 
 ---
 

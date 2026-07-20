@@ -18,6 +18,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`sql/04_data_quality_audits`](sql/04_data_quality_audits) | NULL audits, orphan record checks, duplicate detection, date validity |
 | [`sql/05_stored_procedures`](sql/05_stored_procedures) | Stored procedures — member enrollment, claim filtering, provider termination, claim history, denial summary, high-dollar claim review |
 | [`sql/06_indexing`](sql/06_indexing) | Non-clustered covering index on `authorizations`, plus verification script |
+| [`sql/07_window_functions`](sql/07_window_functions) | `RANK()`/`DENSE_RANK()` ranking exercises |
 | [`power-bi`](power-bi) | Dashboard screenshots, DAX measures, report description |
 | [`ssis`](ssis) | ETL pipeline description, package notes, troubleshooting log |
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
@@ -78,6 +79,7 @@ See [`docs/architecture.md`](docs/architecture.md) for more detail and [`docs/sc
 | 6 | Power Apps — HC_ClaimLookup Canvas App | ✅ Complete |
 | 7 | Authorizations — Indexing, Audit Log Root-Cause & Cross-Environment Data Quality | ✅ Complete |
 | 8 | Power BI & Fabric Deepening — Time Intelligence, Governance, Data Quality | ✅ Complete |
+| 9 | Fabric ETL Depth, DAX Expansion & App Publish | ✅ Complete |
 
 ### Project 1 — Claims Denial Analysis Dashboard
 
@@ -132,6 +134,19 @@ A full week focused on Power BI/DAX depth and Microsoft Fabric governance, with 
 
 **Interview talking point:** The `denial_reason` investigation is a good example of a data-quality check that starts as "is this NULL rate a problem?" and ends up finding a subtler issue — a column serving two purposes — that a simple NULL-percentage audit alone wouldn't surface. It also demonstrates why `column IS NOT NULL` is a fragile proxy for a business condition unless explicitly verified.
 
+### Project 9 — Fabric ETL Depth, DAX Expansion & App Publish
+
+A week built around a real Fabric pipeline with a visible downstream dashboard effect, deeper DAX beyond time intelligence, and a report taken through to a published, curated Power BI App — punctuated by an unplanned Azure outage, a genuine platform-boundary discovery in Power Automate, and two live data-quality bugs caught and fixed with PySpark before they reached the published App.
+
+- **Monday — Azure outage, root-caused and fixed:** An Azure SQL connection failure (error 40925) traced back to an **expired Azure free trial subscription** — and the fix surfaced a structural discovery: Azure free trials are owned by the personal Microsoft Account (MSA) that created them, not the Entra ID admin account used for daily work, which is very likely the same root cause that had permanently blocked Azure Data Factory a month earlier. Reactivated under the correct MSA, resolved a stale-credential connection failure that followed, and set up permanent SSMS Registered Server connections. Built `HC_Load_Claims_Incremental`, hit a real duplicate-key failure from a rolling watermark with no memory of already-loaded rows, fixed via a Lakehouse notebook `dropDuplicates(["claim_id"])` (the SQL endpoint being read-only forced this to Spark, not T-SQL), and discovered the Power BI report had been pointed at Azure SQL instead of the Lakehouse the entire time — repointed it, the architecturally correct fix. Verified outcome: Total Claims moved 552 → 555 and Denied 102 → 103 on refresh, directly attributable to the pipeline. DAX side: `Denial Category` (`SWITCH(TRUE(), ...)`) and `Provider Rank by Billed Amount` (`RANKX`), demonstrated live against a `claim_status` slicer to show the same unedited measure produce four different rankings — a concrete, build-it-live approach to the standing CALCULATE/context-transition interview weak point.
+- **Tuesday — Power Automate boundary + VAR/RETURN refactor:** Built `providers_no_active_contract.sql` using `NOT EXISTS`, correcting on the fly for a schema discovery (no `status` column — "active" is date-range-governed). Found and documented that **Power Automate has no native Fabric Data Pipeline connector** — confirmed by exhausting the Power BI connector list and checking whether Fabric Apps (Preview) filled the gap (it doesn't; that's a separate app-building platform). Scoped `HC_Nightly_Pipeline_Refresh` to refresh the Power BI dataset directly instead, with the limitation documented in the flow's own email body rather than only in session notes. Refactored `Denial Rate %` to `VAR`/`RETURN`, reusing existing measures and adding a safe-division fallback; output unchanged at 555 claims, 103 denied, 0.21 overall.
+- **Wednesday — near-duplicate detection & real watermark pipeline:** Self-join screening query found 77 same-member claim pairs within 7 days (~14% of claims), only 5 sharing a provider, none true duplicates. Replaced Monday's fixed-cutoff watermark stopgap with a genuine 4-activity pipeline chain (`LU_Get_Watermark` → `LU_Get_New_Max_Date` → Copy Data → `SCR_Update_Watermark`) backed by a new `pipeline_watermark` control table, debugging a live NULL-insert failure caused by the update step querying the Warehouse's stale `claims` copy instead of live Azure SQL. Documented three Fabric Warehouse DDL gaps hit while building the control table: no `DEFAULT`, no `PRIMARY KEY` keyword, `DATETIME2` requires explicit precision.
+- **Thursday — ALLEXCEPT/ALL and App publish:** Built `Denial Rate % of Total` using `CALCULATE([Denial Rate %], ALL(providers))` — `ALL` rather than `ALLEXCEPT`, since `ALLEXCEPT` requires at least one preserved-column argument and can't take just a table name. Published the first curated Power BI App from the workspace, selecting 6 of 8 report pages and excluding two dev/QA-only pages (DAX Validation, Data Quality Scorecard) from viewer-facing content.
+- **Data quality catch mid-publish:** Found the Lakehouse's `payer` table still held real, unscrubbed company names despite Azure SQL's copy being correctly scrubbed — corrected via a PySpark `overwrite` write, hitting and resolving a Delta schema-merge conflict with `overwriteSchema`. The subsequent refresh surfaced a second issue: `claim_id 1319` had four fully identical duplicate rows violating the one-to-many relationship constraint, fixed via `dropDuplicates()`. Both caught and resolved before the App shipped, not after.
+- **Friday — SQL rapid-fire & Fabric workspace clean-up:** Ranking window-function review (`RANK` vs. `DENSE_RANK`), manager-hierarchy self-join drilled against a throwaway table. Reorganized the Fabric workspace from 18 loose root-level items into 4 folders (`Lake_and_Ware_House`, `Notebooks`, `Pipeline_CopyJobs`, `Reports_SemanticModels`); deleted 4 stale/duplicate report-and-semantic-model pairs across two workspaces — including one nearly two months stale, still showing real unscrubbed payer names; renamed generic items to match naming convention.
+
+**Interview talking point:** Monday's Azure outage is a strong operational-troubleshooting story on its own — an auth failure that looked like an access loss turned out to be an account-ownership structure issue (MSA vs. Entra ID), and diagnosing it correctly retroactively explained a separate tool (ADF) written off weeks earlier for the wrong reason. Combined with Tuesday's documented Power Automate/Fabric connector gap and Thursday's live payer/claims data-quality catch, the week is less "everything worked" and more "here's how I diagnose and fix things when they don't" — a stronger signal than a clean build-out would have been.
+
 ---
 
 ## SQL Query Library
@@ -157,6 +172,9 @@ Production-style queries, organized by purpose. Each file is commented with the 
 | [`denial_reason_null_investigation`](docs/denial_reason_null_investigation.md) | `GROUP BY`, conditional `SUM(CASE WHEN...)`, flip-side anomaly check | Is the 81.34% NULL rate on `denial_reason` a genuine gap or expected behavior — and is there any row where it's populated incorrectly? |
 | [`network_contracts_overlap_check`](sql/04_data_quality_audits/network_contracts_overlap_check.sql) | Self-join, `ISNULL` for open-ended ranges | Does any provider have two `network_contracts` with overlapping date ranges? (Result: none found) |
 | [`provider_name_whitespace_check`](sql/04_data_quality_audits/provider_name_whitespace_check.sql) | `TRIM`, `UPPER`, `LEN` comparison | Does `provider_name` contain leading/trailing whitespace? (Result: none found) |
+| [`network_contracts_rank_by_type`](sql/07_window_functions/network_contracts_rank_by_type.sql) | `RANK() OVER (PARTITION BY)`, `DENSE_RANK()` | How do contracts rank by rate_modifier within each contract type? |
+| [`providers_no_active_contract`](sql/04_data_quality_audits/providers_no_active_contract.sql) | `NOT EXISTS`, date-range logic | Which providers have no currently active network contract? |
+| [`claims_near_duplicate_self_join`](sql/04_data_quality_audits/claims_near_duplicate_self_join.sql) | Self-join, `ABS(DATEDIFF())` | Are there near-duplicate claims for the same member within 7 days? |
 
 ### Indexing
 
@@ -271,6 +289,11 @@ A few of the architectural and SQL principles applied throughout this build — 
 - **A column can be "mostly correct" and still be a fragile analytical proxy** — `denial_reason IS NOT NULL` looked like a safe stand-in for "this claim was denied" until one Approved row with an unrelated note surfaced; treating the column as overloaded (denial explanation + general adjustment note) rather than single-purpose is the more accurate model
 - **Fabric's native Git integration defaults to Azure DevOps** — GitHub requires tenant-level enablement and isn't available out of the box on a trial capacity, which matters for any GitHub-based team planning a Fabric migration
 - **Fabric governance is not one setting** — data-access control (OneLake delegated SAS tokens) and AI-feature governance (Copilot item approval) are separate layers that don't substitute for each other; Copilot's own item-approval toggle explicitly does not override underlying user permissions
+- **Azure free trial subscriptions are owned by the personal Microsoft Account (MSA) that created them**, not the Entra ID admin account used for daily work — a subscription that appears to vanish is often just invisible to the wrong login, not actually lost
+- **`ALLEXCEPT` requires at least one column argument** — it cannot be called with only a table name; `ALL(table)` is the correct function when clearing every filter on a table with nothing preserved
+- **Fabric Warehouse `IDENTITY` columns must be typed `BIGINT`**, not `INT` — a distinct constraint from the separately-documented lack of `PRIMARY KEY` support
+- **Delta `.write().mode("overwrite")` merges schemas by default rather than replacing them** — `.option("overwriteSchema", "true")` is required when the incoming schema doesn't exactly match the existing table
+- **Power Automate has no native connector for triggering a Fabric Data Pipeline** as of this build — only dataset/report/scorecard-level Power BI actions exist; confirmed by exhausting the connector list rather than assuming
 
 ---
 
