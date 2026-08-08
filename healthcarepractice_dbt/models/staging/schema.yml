@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: stg_claims
+    description: "Staging model for raw claims data from dbo.claims"
+    columns:
+      - name: claim_id
+        description: "Unique identifier for each claim"
+        tests:
+          - unique
+          - not_null
+      - name: claim_status
+        description: "Status of the claim (Approved, Denied, Pending)"
+        tests:
+          - not_null
+      - name: billed_amount
+        description: "Dollar amount billed for the claim"
+        tests:
+          - not_null
+
+  - name: stg_claims_by_status
+    description: "Aggregated claim counts and totals grouped by status"
+    columns:
+      - name: claim_status
+        description: "Status of the claim"
+        tests:
+          - not_null
+      - name: claim_count
+        description: "Count of claims in this status"
+        tests:
+          - not_null

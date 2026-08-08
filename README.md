@@ -24,6 +24,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
 | [`Databricks`](Databricks) | PySpark notebooks — data ingestion, transformation, Delta table writes, Jobs & Pipelines |
 | [`Python`](Python) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
+| [`Python/edi_834_pipeline`](Python/edi_834_pipeline) | X12 834 generator, parser, and severity-based enrollment validator — full EDI pipeline with live Databricks/Power BI connection |
 | [`Power_Automate`](Power_Automate) | Cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh, data quality score email, refresh confirmation |
 | [`Power_Apps`](Power_Apps) | HC_ClaimLookup canvas app — real-time claim status lookup connected live to Azure SQL 
 | [`healthcarepractice_dbt`](healthcarepractice_dbt) | dbt exploration — present but not actively maintained; superseded by the Fabric/PySpark transformation approach used elsewhere in this repo |
