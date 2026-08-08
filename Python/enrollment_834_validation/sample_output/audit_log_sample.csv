@@ -1,0 +1,30 @@
+member_id,severity,field,issue,outcome
+M1001,NONE,,No issues found.,LOADED
+M1002,NONE,,No issues found.,LOADED
+M1003,NONE,,No issues found.,LOADED
+M1004,CRITICAL,ssn,"SSN is missing, malformed, or invalid placeholder.",REJECTED
+M1005,WARNING,plan_code,Plan code is missing or ambiguous.,LOADED
+(missing),CRITICAL,member_id,Member ID is missing.,REJECTED
+(missing),WARNING,plan_code,Plan code is missing or ambiguous.,REJECTED
+(missing),WARNING,term_date,Term date 2026-03-16 is in the past relative to processing date.,REJECTED
+M1007,NONE,,No issues found.,LOADED
+M1008,WARNING,term_date,Term date 2026-03-18 is in the past relative to processing date.,LOADED
+M1009,CRITICAL,coverage_effective_date,Coverage effective date '13/45/2026' is not a valid date.,REJECTED
+M1010,CRITICAL,coverage_effective_date,Coverage effective date '13/45/2026' is not a valid date.,REJECTED
+M1011,CRITICAL,ssn,"SSN is missing, malformed, or invalid placeholder.",REJECTED
+M1012,WARNING,plan_code,Plan code is missing or ambiguous.,LOADED
+M1012,WARNING,term_date,Term date 2026-08-03 is in the past relative to processing date.,LOADED
+M1013,NONE,,No issues found.,LOADED
+M1014,NONE,,No issues found.,LOADED
+M1015,CRITICAL,ssn,"SSN is missing, malformed, or invalid placeholder.",REJECTED
+M1016,WARNING,plan_code,Plan code is missing or ambiguous.,LOADED
+M1017,NONE,,No issues found.,LOADED
+(missing),CRITICAL,member_id,Member ID is missing.,REJECTED
+M1019,NONE,,No issues found.,LOADED
+M1020,NONE,,No issues found.,LOADED
+M1021,NONE,,No issues found.,LOADED
+(missing),CRITICAL,member_id,Member ID is missing.,REJECTED
+(missing),WARNING,term_date,Term date 2026-07-30 is in the past relative to processing date.,REJECTED
+M1023,NONE,,No issues found.,LOADED
+M1024,WARNING,plan_code,Plan code is missing or ambiguous.,LOADED
+M1025,WARNING,plan_code,Plan code is missing or ambiguous.,LOADED
