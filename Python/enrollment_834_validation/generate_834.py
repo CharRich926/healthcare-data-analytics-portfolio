@@ -210,8 +210,13 @@ def main():
     file_content = build_834_file(records)
 
     output_path = "enrollment_834_sample.txt"
+    # Written with a newline after each segment terminator for human readability
+    # on GitHub/in a text editor. This does not change the file's validity --
+    # X12 parsers split on the '~' segment terminator itself, not on line breaks.
+    # This is standard practice for human-reviewable EDI samples.
+    readable_content = file_content.replace(SEGMENT_TERM, SEGMENT_TERM + "\n")
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(file_content)
+        f.write(readable_content)
 
     print(f"Generated {output_path} with {len(records)} member records.")
     print(f"File size: {len(file_content)} characters")
