@@ -23,7 +23,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`ssis`](ssis) | ETL pipeline description, package notes, troubleshooting log |
 | [`docs`](docs) | Schema diagram, architecture diagram, key technical learnings |
 | [`Databricks`](Databricks) | PySpark notebooks — data ingestion, transformation, Delta table writes, Jobs & Pipelines |
-| [`Python`](Python) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
+| [`Python/data_quality_framework`](Python/data_quality_framework) | Reusable data quality functions — completeness, uniqueness, validity, integrity, JSON schema validation |
 | [`Python/edi_834_pipeline`](Python/edi_834_pipeline) | X12 834 generator, parser, and severity-based enrollment validator — full EDI pipeline with live Databricks/Power BI connection |
 | [`Power_Automate`](Power_Automate) | Cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh, data quality score email, refresh confirmation |
 | [`Power_Apps`](Power_Apps) | HC_ClaimLookup canvas app — real-time claim status lookup connected live to Azure SQL 
@@ -100,7 +100,7 @@ Full writeup and screenshots: [`power-bi/README.md`](power-bi/README.md)
 
 ### Project 3 — Data Quality Scorecard
 
-4 KPI cards in Power BI (Completeness, Integrity, Uniqueness, Validity) built from SQL audit queries and DAX measures. Published to Fabric workspace. Python equivalents built in Databricks — see [`Python/data_quality_functions.py`](Python/data_quality_functions.py).
+4 KPI cards in Power BI (Completeness, Integrity, Uniqueness, Validity) built from SQL audit queries and DAX measures. Published to Fabric workspace. Python equivalents built in Databricks — see [`Python/data_quality_framework/data_quality_functions.py`](Python/data_quality_framework/data_quality_functions.py).
 
 ### Project 4 — SSIS Enhancement — Audit Logging
 
@@ -219,7 +219,7 @@ Production-style queries, organized by purpose. Each file is commented with the 
 
 ## Python Data Quality Framework
 
-[`Python/data_quality_functions.py`](Python/data_quality_functions.py)
+[`Python/data_quality_framework/data_quality_functions.py`](Python/data_quality_framework/data_quality_functions.py)
 
 5 reusable parameterized functions that mirror the SQL audit queries, built to run in Databricks against a pandas DataFrame:
 
