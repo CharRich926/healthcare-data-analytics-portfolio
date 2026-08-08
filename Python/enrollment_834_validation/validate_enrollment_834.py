@@ -18,7 +18,6 @@ then spark.read.csv() -> .saveAsTable() into a Delta table for SQL/Power BI.
 
 import csv
 import random
-import re
 from datetime import date, timedelta
 
 random.seed(42)  # reproducible batches for demo/interview walkthroughs
@@ -40,7 +39,6 @@ def generate_synthetic_batch(n=25):
 
     for i in range(1, n + 1):
         member_id = f"M{1000 + i}"
-        ssn = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
         first_name = f"FirstName{i}"
         last_name = f"LastName{i}"
         lob = random.choice(LINES_OF_BUSINESS)
@@ -51,7 +49,6 @@ def generate_synthetic_batch(n=25):
 
         record = {
             "member_id": member_id,
-            "ssn": ssn,
             "first_name": first_name,
             "last_name": last_name,
             "line_of_business": lob,
@@ -66,7 +63,7 @@ def generate_synthetic_batch(n=25):
         if roll < 0.08:
             record["member_id"] = ""  # CRITICAL: missing member ID
         elif roll < 0.16:
-            record["ssn"] = "000-00-0000"  # CRITICAL: malformed/invalid SSN
+            record["line_of_business"] = "Unspecified"  # CRITICAL: invalid/unroutable LOB
         elif roll < 0.24:
             record["coverage_effective_date"] = "13/45/2026"  # CRITICAL: invalid date
         elif roll < 0.30:
@@ -86,9 +83,6 @@ def generate_synthetic_batch(n=25):
 # 2. Validation rules
 # ---------------------------------------------------------------------------
 
-SSN_PATTERN = re.compile(r"^\d{3}-\d{2}-\d{4}$")
-
-
 def validate_record(record):
     """Returns a list of (severity, field, message) tuples for a single record.
     severity is either 'CRITICAL' or 'WARNING'."""
@@ -98,9 +92,11 @@ def validate_record(record):
     if not record["member_id"].strip():
         issues.append(("CRITICAL", "member_id", "Member ID is missing."))
 
-    # --- CRITICAL: malformed/invalid SSN ---
-    if not SSN_PATTERN.match(record["ssn"]) or record["ssn"] == "000-00-0000":
-        issues.append(("CRITICAL", "ssn", "SSN is missing, malformed, or invalid placeholder."))
+    # --- CRITICAL: invalid/unroutable Line of Business ---
+    if record["line_of_business"] not in LINES_OF_BUSINESS:
+        issues.append(("CRITICAL", "line_of_business",
+                        f"Line of Business '{record['line_of_business']}' does not map to a "
+                        f"recognized program (Medicaid/Medicare/Marketplace/Duals) and cannot be routed."))
 
     # --- CRITICAL: invalid coverage effective date ---
     try:
@@ -192,7 +188,7 @@ def main():
     loaded, rejected, audit_rows = process_batch(batch)
 
     enrollment_fields = [
-        "member_id", "ssn", "first_name", "last_name", "line_of_business",
+        "member_id", "first_name", "last_name", "line_of_business",
         "plan_code", "phone", "coverage_effective_date", "term_date",
         "load_status", "flagged_for_review",
     ]
