@@ -11,7 +11,7 @@ Two working SQL Server Reporting Services reports, built in Microsoft Report Bui
 ### `rpt_MemberClaimsHistory.rdl`
 Flat claim-level list — `claim_id`, `provider_id`, `billed_amount`, `claim_status` — pulled directly from `dbo.claims`.
 
-### `rpt_MonthlyDenialSummary.rdl`
+### `rpt_DenialSummaryByProvider.rdl`
 Provider-level denial summary: total claims, denied claims, and denied billed amount per provider, with a grand total row across all providers.
 
 ```sql

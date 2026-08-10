@@ -28,6 +28,7 @@ End-to-end healthcare data analytics environment — designed, built, and migrat
 | [`Power_Automate`](Power_Automate) | Cloud flows — file trigger, weekly claims summary email, Power BI dataset refresh, data quality score email, refresh confirmation |
 | [`Power_Apps`](Power_Apps) | HC_ClaimLookup canvas app — real-time claim status lookup connected live to Azure SQL 
 | [`healthcarepractice_dbt`](healthcarepractice_dbt) | dbt exploration — present but not actively maintained; superseded by the Fabric/PySpark transformation approach used elsewhere in this repo |
+| [`ssrs`](ssrs) | SSRS reports built in Report Builder — member claims history, provider-level denial summary, connected live to HealthcarePractice |
 
 ---
 
